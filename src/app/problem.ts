@@ -2,6 +2,7 @@ import type { ProblemDetails } from '../domain/problem.ts';
 
 const titles: Record<number, string> = {
   400: 'Bad Request',
+  404: 'Not Found',
   405: 'Method Not Allowed',
   413: 'Content Too Large',
   500: 'Internal Server Error',

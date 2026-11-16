@@ -1,25 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createChatHandler } from '../../src/ui/chat-handler.ts';
+import { createApi } from '../../src/ui/http/api.ts';
 import { createReply, type Reply } from '../../src/app/chat.ts';
 
 async function request(method: string, body: string, reply: Reply, accept = '') {
-  const req = Readable.from([Buffer.from(body)]) as IncomingMessage;
-  req.method = method;
-  req.url = '/api/chat';
-  req.headers = { accept };
-  const headers: Record<string, string> = {};
-  let payload = '';
-  const res = {
-    statusCode: 200,
-    setHeader(name: string, value: string) { headers[name.toLowerCase()] = value; },
-    write(value: string) { payload += value; },
-    end(value = '') { payload += value; },
-  };
-  await createChatHandler(reply)(req, res as unknown as ServerResponse, () => assert.fail('Unexpected next'));
-  return { status: res.statusCode, headers, body: headers['content-type']?.startsWith('application/x-ndjson')
+  const api = createApi({ reply, queen: { generate: async () => { throw new Error('Unexpected Queens request'); } } });
+  const response = await api.request('/api/chat', {
+    method, headers: { 'Content-Type': 'application/json', Accept: accept },
+    ...(method === 'GET' ? {} : { body }),
+  });
+  const payload = await response.text();
+  const headers = Object.fromEntries(response.headers);
+  return { status: response.status, headers, body: headers['content-type']?.startsWith('application/x-ndjson')
     ? payload.trim().split('\n').map((line) => JSON.parse(line)) : JSON.parse(payload) };
 }
 

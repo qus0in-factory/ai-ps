@@ -1,20 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createQueenHandler } from '../../src/ui/queen-handler.ts';
+import { createApi } from '../../src/ui/http/api.ts';
 import type { QueensGenerator } from '../../src/domain/queens/generation.ts';
 
 async function request(body: string, generator: QueensGenerator, method = 'POST') {
-  const req = Readable.from([Buffer.from(body)]) as IncomingMessage;
-  req.url = '/api/queen/generate'; req.method = method;
-  const headers: Record<string, string> = {};
-  let payload = '';
-  const res = { statusCode: 200, setHeader: (name: string, value: string) => { headers[name] = value; },
-    write: (value: string) => { payload += value; }, end: (value = '') => { payload += value; },
-  };
-  await createQueenHandler(generator)(req, res as unknown as ServerResponse, () => assert.fail('Unexpected next'));
-  return { status: res.statusCode, headers, payload };
+  const api = createApi({ reply: async () => { throw new Error('Unexpected chat request'); }, queen: generator });
+  const response = await api.request('/api/queen/generate', {
+    method, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body }),
+  });
+  return { status: response.status, headers: { 'Content-Type': response.headers.get('Content-Type') }, payload: await response.text() };
 }
 
 describe('Given the Queens generation endpoint', () => {

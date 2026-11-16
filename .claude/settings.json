@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(herdr agent list)",
+      "Bash(herdr agent list *)",
+      "Bash(herdr agent read *)",
+      "Bash(herdr pane read *)",
+      "Bash(herdr agent wait *)",
+      "Bash(herdr agent get *)",
+      "Bash(herdr pane list *)",
+      "Bash(herdr tab list *)",
+      "Bash(herdr pane get *)",
+      "Bash(pnpm test)",
+      "Bash(pnpm typecheck)",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__opencode__read",
+      "mcp__opencode__grep",
+      "mcp__claude-in-chrome__find"
+    ]
+  }
+}
