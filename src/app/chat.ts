@@ -1,7 +1,12 @@
-import { isConversation, type ChatGateway, type ChatMessage, type ChatState } from '../domain/chat.ts';
+import { isConversation, type ChatGateway, type ChatMemory, type ChatMessage, type ChatState } from '../domain/chat.ts';
 
-export function createChat(gateway: ChatGateway) {
-  let state: ChatState = { messages: [], draft: '', pending: false, error: '' };
+export function createChat(gateway: ChatGateway, memory?: ChatMemory) {
+  const restored = memory?.load();
+  let state: ChatState = {
+    messages: restored?.ok ? restored.value : [],
+    draft: '', pending: false,
+    error: restored && !restored.ok ? restored.reason : '',
+  };
   const listeners = new Set<(state: ChatState) => void>();
   const update = (patch: Partial<ChatState>) => {
     state = { ...state, ...patch };
@@ -20,9 +25,14 @@ export function createChat(gateway: ChatGateway) {
       const previous = state.messages;
       const messages: ChatMessage[] = [...previous, { role: 'user', content }];
       update({ messages, draft: '', pending: true, error: '' });
-      const result = await gateway.complete([{ role: 'user', content }]);
+      const result = await gateway.complete(messages);
       if (result.ok) {
-        update({ messages: [...messages, { role: 'assistant', content: result.value }], pending: false });
+        const completed: ChatMessage[] = [...messages, { role: 'assistant', content: result.value }];
+        const saved = memory?.save(completed);
+        update({
+          messages: completed, pending: false,
+          error: saved && !saved.ok ? saved.reason : '',
+        });
       } else {
         update({ messages: previous, draft: content, pending: false, error: result.reason });
       }

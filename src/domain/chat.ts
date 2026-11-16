@@ -6,6 +6,10 @@ export type Result<T> = { ok: true; value: T } | { ok: false; reason: string };
 export interface ChatGateway {
   complete(messages: ChatMessage[]): Promise<Result<string>>;
 }
+export interface ChatMemory {
+  load(): Result<ChatMessage[]>;
+  save(messages: ChatMessage[]): Result<void>;
+}
 export interface ChatState {
   messages: ChatMessage[];
   draft: string;
