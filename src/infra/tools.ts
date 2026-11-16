@@ -1,10 +1,13 @@
 import type { Tool } from '../domain/tools.ts';
+import type { QueensOperations } from '../domain/queens/types.ts';
+import { createQueensTools } from './queens-tools.ts';
 
 export function createTools(
-  { apiKey, fetcher = fetch, now = () => new Date() }: {
+  { apiKey, fetcher = fetch, now = () => new Date(), queens }: {
     apiKey?: string;
     fetcher?: typeof fetch;
     now?: () => Date;
+    queens?: QueensOperations;
   },
 ): Tool[] {
   return [{
@@ -88,5 +91,5 @@ export function createTools(
         return { ok: false, reason: '현재 시간을 조회하지 못했습니다.' };
       }
     },
-  }];
+  }, ...(queens ? createQueensTools(queens) : [])];
 }

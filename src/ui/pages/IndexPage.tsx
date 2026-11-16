@@ -10,6 +10,7 @@ export function IndexPage() {
           <span>Chat</span>
           <span aria-hidden="true">→</span>
         </A>
+        <A href="/queen" class="page-link"><span>Queens</span><span aria-hidden="true">→</span></A>
       </nav>
     </main>
   );

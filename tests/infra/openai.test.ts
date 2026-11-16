@@ -63,3 +63,23 @@ describe('Given OpenAI native function calling', () => {
     assert.equal(result.ok, true);
   });
 });
+
+describe('Given Queens generation completion options', () => {
+  it('When forcing verify_puzzle Then forwards temperature 0.8 and cancellation without serializing the signal', async () => {
+    const controller = new AbortController();
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
+      const body = JSON.parse(init!.body as string);
+      assert.equal(body.temperature, 0.8);
+      assert.equal(body.reasoning_effort, 'none');
+      assert.equal(body.parallel_tool_calls, false);
+      assert.deepEqual(body.tool_choice, { type: 'function', function: { name: 'verify_puzzle' } });
+      assert.equal(body.signal, undefined);
+      assert.equal(init!.signal, controller.signal);
+      return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [] } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '퍼즐 생성' }], [{ name: 'verify_puzzle', description: 'Verify puzzle', parameters: { type: 'object', properties: {}, additionalProperties: false, required: [] } }], {
+      temperature: 0.8, parallel_tool_calls: false, tool_choice: { type: 'function', function: { name: 'verify_puzzle' } }, signal: controller.signal,
+    });
+    assert.equal(result.ok, true);
+  });
+});

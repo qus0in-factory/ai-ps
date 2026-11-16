@@ -1,0 +1,3 @@
+.queens-board { width: min(100%, 480px); table-layout: fixed; border-collapse: collapse; margin: 20px 0; }
+.queens-board td { border: 1px solid #62625c; padding: 0; text-align: center; color: #242424; }
+.queens-board td span { display: grid; place-items: center; min-height: 24px; aspect-ratio: 1; font-size: 12px; }

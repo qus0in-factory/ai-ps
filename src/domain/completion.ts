@@ -18,7 +18,7 @@ export type CompletionMessage = ChatMessage | AssistantMessage |
   { role: 'tool'; tool_call_id: string; content: string };
 
 export interface FunctionCompletionGateway {
-  complete(messages: CompletionMessage[], tools: ToolDefinition[]): Promise<Result<AssistantMessage>>;
+  complete(messages: CompletionMessage[], tools: ToolDefinition[], options?: CompletionOptions): Promise<Result<AssistantMessage>>;
 }
 
 export interface CompletionGateway {
@@ -27,6 +27,10 @@ export interface CompletionGateway {
 
 export interface CompletionOptions {
   response_format?: { type: 'json_object' };
+  temperature?: number;
+  tool_choice?: { type: 'function'; function: { name: string } };
+  parallel_tool_calls?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface CompletionParams {
@@ -34,6 +38,8 @@ export interface CompletionParams {
   messages: CompletionMessage[];
   response_format?: CompletionOptions['response_format'];
   tools?: { type: 'function'; function: ToolDefinition & { strict: true } }[];
+  tool_choice?: CompletionOptions['tool_choice'];
+  parallel_tool_calls?: boolean;
   reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   temperature?: number;
   max_completion_tokens?: number;

@@ -46,9 +46,10 @@ export function createOpenAICompletion(
   config: { model?: string; apiKey?: string; fetcher?: typeof fetch },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
-    async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}) {
+    async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
       const tools = Array.isArray(options) ? options : [];
-      const responseFormat = Array.isArray(options) ? undefined : options.response_format;
+      const settings = Array.isArray(options) ? nativeOptions : options;
+      const responseFormat = settings.response_format;
       const model = config.model?.trim();
       if (!model) return { ok: false, reason: 'OPENAI_MODEL을 .env에 설정해주세요.' };
       const functions = tools.map((definition) => ({
@@ -57,9 +58,12 @@ export function createOpenAICompletion(
       const result = await completion({
         model, messages,
         ...(responseFormat ? { response_format: responseFormat } : {}),
+        ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
+        ...(settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),
+        ...(settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
       }, {
-        apiKey: config.apiKey, fetcher: config.fetcher,
+        apiKey: config.apiKey, fetcher: config.fetcher, signal: settings.signal,
       });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;

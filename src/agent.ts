@@ -5,6 +5,7 @@ import { createToolChat } from './app/tool-chat.ts';
 import { createPlanExecuteChat } from './app/plan-execute-chat.ts';
 import { createFunctionToolChat } from './app/function-tool-chat.ts';
 import { createTools } from './infra/tools.ts';
+import { createQueensService } from './app/queens/service.ts';
 import { createToolLogger } from './infra/tool-logger.ts';
 import { createLogger } from './infra/logger.ts';
 
@@ -15,7 +16,7 @@ const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFuncti
 const gateway = createGateway(createOpenAICompletion({
   model: process.env.OPENAI_MODEL,
   apiKey: process.env.OPENAI_API_KEY,
-}), createTools({ apiKey: process.env.OWM_API_KEY }), createToolLogger(logger));
+}), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger));
 const result = await gateway.complete([
   { role: 'user', content: process.argv.slice(2).join(' ') || '안녕하세요!' },
 ]);
