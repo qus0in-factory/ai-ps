@@ -11,8 +11,16 @@
 .queens-page button:disabled { opacity: .4; cursor: default; }
 .queens-page button:focus-visible, .queens-page select:focus-visible { outline: 2px solid #62625c; outline-offset: 3px; }
 .queens-error { color: #b13832; overflow-wrap: anywhere; }
+.queens-play { margin-top: 28px; }
+.queens-guide { color: #62625c; font-size: 14px; }
+.queens-playbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.queens-playbar .queens-moves { color: #62625c; font-size: 14px; }
+.queens-solved { color: #2f6b3c; font-size: 16px; }
+.queens-revealed { color: #8a5a1e; font-size: 14px; font-weight: 600; }
+.queens-playbar button { padding: 8px 14px; font-size: 14px; }
 .queens-log { margin-top: 28px; border-top: 1px solid #ddddd7; }
 .queens-log ol { padding-left: 20px; }
 .queens-log li { margin: 8px 0; font-size: 14px; }
 .queens-log summary { cursor: pointer; }
 .queens-log pre { overflow: auto; max-height: 320px; white-space: pre-wrap; overflow-wrap: anywhere; background: #eeeee9; border-radius: 8px; padding: 12px; }
+@media (max-width: 420px) { .queens-page { padding: 20px 16px 40px; } .queens-playbar { gap: 10px; } }
