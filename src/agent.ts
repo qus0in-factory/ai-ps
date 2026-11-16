@@ -2,6 +2,7 @@ import { loadEnvFile } from 'node:process';
 import { createOpenAICompletion } from './infra/openai.ts';
 
 import { createToolChat } from './app/tool-chat.ts';
+import { createPlanExecuteChat } from './app/plan-execute-chat.ts';
 import { createFunctionToolChat } from './app/function-tool-chat.ts';
 import { createTools } from './infra/tools.ts';
 import { createToolLogger } from './infra/tool-logger.ts';
@@ -9,7 +10,8 @@ import { createLogger } from './infra/logger.ts';
 
 loadEnvFile('.env');
 const logger = createLogger();
-const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat : createToolChat;
+const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
+    : ['json', 'react'].includes(process.env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
 const gateway = createGateway(createOpenAICompletion({
   model: process.env.OPENAI_MODEL,
   apiKey: process.env.OPENAI_API_KEY,

@@ -2,6 +2,7 @@ import type { ToolLogger } from '../domain/tools.ts';
 import type { Logger } from 'pino';
 
 const messages = {
+  plan_created: '실행 계획 생성',
   model_request: '모델 요청',
   model_response: '모델 응답',
   model_error: '모델 요청 실패',

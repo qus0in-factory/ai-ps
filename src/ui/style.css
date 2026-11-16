@@ -44,6 +44,16 @@ article p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-trace code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-trace summary { cursor: pointer; }
 .agent-trace pre { padding: 12px; border-radius: 8px; background: #eeeee9; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plan-trace { margin: 12px 0 20px; font-size: 14px; color: #4b4b45; }
+.plan-trace > section { margin-bottom: 16px; padding-left: 14px; border-left: 2px solid #d6d6cf; }
+.plan-trace h3, .final-answer-label { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #292925; }
+.plan-trace p { margin: 0 0 8px; white-space: normal; }
+.plan-trace ol { margin: 0; padding-left: 20px; }
+.plan-trace li + li { margin-top: 6px; }
+.step-status { margin-right: 8px; font-size: 12px; font-weight: 600; }
+.plan-trace details { margin-top: 6px; }
+.plan-trace summary { cursor: pointer; }
+.plan-trace pre { overflow-x: auto; padding: 12px; background: #eeeee9; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 footer { padding: 16px 24px 24px; }
 form { display: flex; align-items: flex-end; gap: 12px; padding: 12px; background: white; border: 1px solid #ddddd7; border-radius: 16px; }
 form:focus-within { border-color: #888880; }

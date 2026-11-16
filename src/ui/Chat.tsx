@@ -32,13 +32,14 @@ export function Chat(props: { chat: ChatController }) {
               <span class="role">{message.role === 'user' ? '나' : 'AI'}</span>
               <Show when={message.role === 'assistant'} fallback={<p>{message.content}</p>}>
                 <AgentTrace steps={message.steps ?? []} />
+                <Show when={message.steps?.some((step) => step.kind === 'plan')}><h3 class="final-answer-label">최종 답변</h3></Show>
                 <div class="markdown" innerHTML={renderMarkdown(message.content)} />
               </Show>
             </article>
           )}</For>
         </Show>
-        <Show when={state().pending || state().error}><AgentTrace steps={state().steps} /></Show>
-        <Show when={state().pending}><p class="waiting">답변을 작성하고 있어요…</p></Show>
+        <Show when={state().pending || state().error}><AgentTrace steps={state().steps} pending={state().pending} /></Show>
+        <Show when={state().pending && !state().steps.some((step) => step.kind === 'planning')}><p class="waiting">답변을 작성하고 있어요…</p></Show>
         <div ref={bottom} />
       </section>
       <footer>

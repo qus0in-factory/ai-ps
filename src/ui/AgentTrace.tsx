@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import type { AgentStep } from '../domain/agent-step.ts';
+import { PlanTrace } from './PlanTrace.tsx';
 
 function observation(step: Extract<AgentStep, { kind: 'observation' }>): string {
   if (!step.result.ok) return step.result.reason;
@@ -14,9 +15,12 @@ function observation(step: Extract<AgentStep, { kind: 'observation' }>): string 
   return '도구 실행 완료';
 }
 
-export function AgentTrace(props: { steps: AgentStep[] }) {
+export function AgentTrace(props: { steps: AgentStep[]; pending?: boolean }) {
   return (
     <Show when={props.steps.length}>
+      <Show
+        when={props.steps.some((step) => ['planning', 'plan', 'execution', 'answer'].includes(step.kind))}
+        fallback={(
       <section class="agent-trace" aria-label="판단 요약과 도구 실행 과정">
         <ol>
           <For each={props.steps}>{(step) => (
@@ -42,6 +46,10 @@ export function AgentTrace(props: { steps: AgentStep[] }) {
           )}</For>
         </ol>
       </section>
+        )}
+      >
+        <PlanTrace steps={props.steps} pending={props.pending} />
+      </Show>
     </Show>
   );
 }
