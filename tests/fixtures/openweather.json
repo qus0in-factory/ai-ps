@@ -1,0 +1,37 @@
+{
+  "location": {
+    "name": "Seoul",
+    "lat": 37.5666791,
+    "lon": 126.9782914,
+    "country": "KR"
+  },
+  "weather": {
+    "name": "Seoul",
+    "main": {
+      "temp": 14.76,
+      "feels_like": 13.94,
+      "temp_min": 14.76,
+      "temp_max": 15.78,
+      "pressure": 1021,
+      "humidity": 63,
+      "sea_level": 1021,
+      "grnd_level": 1012
+    },
+    "weather": [
+      {
+        "id": 800,
+        "main": "Clear",
+        "description": "맑음",
+        "icon": "01n"
+      }
+    ],
+    "wind": {
+      "speed": 4.12,
+      "deg": 80
+    },
+    "dt": 1794826890,
+    "sys": {
+      "country": "KR"
+    }
+  }
+}

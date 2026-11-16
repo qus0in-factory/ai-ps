@@ -1,0 +1,13 @@
+import type { ProblemDetails } from '../domain/problem.ts';
+
+const titles: Record<number, string> = {
+  400: 'Bad Request',
+  405: 'Method Not Allowed',
+  413: 'Content Too Large',
+  500: 'Internal Server Error',
+  502: 'Bad Gateway',
+};
+
+export function createProblem(status: number, detail: string, instance: string): ProblemDetails {
+  return { type: 'about:blank', title: titles[status] ?? 'Unknown Error', status, detail, instance };
+}

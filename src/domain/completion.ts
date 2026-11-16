@@ -1,8 +1,19 @@
-import type { ChatMessage } from './chat.ts';
+import type { ChatMessage, Result } from './chat.ts';
+
+export interface AssistantMessage {
+  role: 'assistant';
+  content: string | null;
+  refusal?: string | null;
+}
+
+export interface CompletionGateway {
+  complete(messages: ChatMessage[]): Promise<Result<AssistantMessage>>;
+}
 
 export interface CompletionParams {
   model: string;
   messages: ChatMessage[];
+  reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   temperature?: number;
   max_completion_tokens?: number;
 }
@@ -14,11 +25,7 @@ export interface CompletionResponse {
   model: string;
   choices: {
     index: number;
-    message: {
-      role: 'assistant';
-      content: string | null;
-      refusal?: string | null;
-    };
+    message: AssistantMessage;
     finish_reason: string;
   }[];
   usage?: {

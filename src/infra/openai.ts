@@ -1,9 +1,9 @@
-import type { CompletionParams, CompletionResponse } from '../domain/completion.ts';
-import type { ChatGateway, Result } from '../domain/chat.ts';
+import type { CompletionGateway, CompletionParams, CompletionResponse } from '../domain/completion.ts';
+import type { Result } from '../domain/chat.ts';
 
 export async function completion(
   params: CompletionParams,
-  options: { apiKey?: string; signal?: AbortSignal } = {},
+  options: { apiKey?: string; signal?: AbortSignal; fetcher?: typeof fetch } = {},
 ): Promise<Result<CompletionResponse>> {
   try {
     const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -11,7 +11,7 @@ export async function completion(
       throw new Error('OPENAI_API_KEY is required');
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -41,16 +41,19 @@ export async function completion(
   }
 }
 
-export function createOpenAIChat(config: { model?: string; apiKey?: string }): ChatGateway {
+export function createOpenAICompletion(
+  config: { model?: string; apiKey?: string; fetcher?: typeof fetch },
+): CompletionGateway {
   return {
     async complete(messages) {
       const model = config.model?.trim();
       if (!model) return { ok: false, reason: 'OPENAI_MODEL을 .env에 설정해주세요.' };
-      const result = await completion({ model, messages }, { apiKey: config.apiKey });
+      const result = await completion({ model, messages }, {
+        apiKey: config.apiKey, fetcher: config.fetcher,
+      });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;
-      const content = message?.content ?? message?.refusal;
-      return content ? { ok: true, value: content }
+      return message ? { ok: true, value: message }
         : { ok: false, reason: '응답이 비어 있습니다. 다시 시도해주세요.' };
     },
   };
