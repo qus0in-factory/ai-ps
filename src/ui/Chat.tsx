@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { ChatController } from '../app/chat.ts';
+import { renderMarkdown } from './markdown.ts';
 import './style.css';
 
 export function Chat(props: { chat: ChatController }) {
@@ -28,7 +29,9 @@ export function Chat(props: { chat: ChatController }) {
           <For each={state().messages}>{(message) => (
             <article class={message.role}>
               <span class="role">{message.role === 'user' ? '나' : 'AI'}</span>
-              <p>{message.content}</p>
+              <Show when={message.role === 'assistant'} fallback={<p>{message.content}</p>}>
+                <div class="markdown" innerHTML={renderMarkdown(message.content)} />
+              </Show>
             </article>
           )}</For>
         </Show>

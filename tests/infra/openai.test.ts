@@ -44,3 +44,21 @@ describe('Given OpenAI completion wired to OpenWeather tools', () => {
     assert.equal(weatherCalls, 2);
   });
 });
+
+describe('Given OpenAI native function calling', () => {
+  it('When tools are provided Then sends the native schema and reasoning_effort none', async () => {
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
+      const body = JSON.parse(init!.body as string);
+      assert.equal(body.tools[0].type, 'function');
+      assert.equal(body.tools[0].function.name, 'get_current_time');
+      assert.equal(body.tools[0].function.strict, true);
+      assert.equal(body.reasoning_effort, 'none');
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '현재 시간입니다.' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '시간' }], [{
+      name: 'get_current_time', description: 'Current time',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    }]);
+    assert.equal(result.ok, true);
+  });
+});

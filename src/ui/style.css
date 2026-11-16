@@ -16,6 +16,25 @@ h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.5px; }
 article { margin-bottom: 24px; }
 .role { font-size: 12px; font-weight: 600; color: #777772; }
 article p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.markdown { margin-top: 6px; overflow-wrap: anywhere; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: 0 0 12px; white-space: normal; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: 20px 0 10px; line-height: 1.4; letter-spacing: normal; }
+.markdown h1 { font-size: 24px; }
+.markdown h2 { font-size: 21px; }
+.markdown h3 { font-size: 18px; }
+.markdown ul, .markdown ol { padding-left: 24px; margin: 12px 0; }
+.markdown li + li { margin-top: 4px; }
+.markdown code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: #eeeee9; border-radius: 4px; padding: 2px 5px; }
+.markdown pre { max-width: 100%; overflow-x: auto; background: #eeeee9; padding: 14px 16px; border-radius: 10px; white-space: pre; }
+.markdown pre code { padding: 0; background: transparent; border-radius: 0; }
+.markdown blockquote { margin: 12px 0; padding-left: 16px; border-left: 3px solid #b0b0a8; color: #62625c; }
+.markdown a { color: #245c94; text-underline-offset: 3px; }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 12px 0; }
+.markdown th, .markdown td { padding: 8px 12px; border: 1px solid #ddddd7; text-align: left; }
+.markdown img { max-width: 100%; height: auto; }
+.markdown hr { margin: 20px 0; border: 0; border-top: 1px solid #ddddd7; }
 .user { margin-left: auto; max-width: 85%; width: fit-content; background: #eeeee9; padding: 12px 18px; border-radius: 16px; }
 .waiting { color: #92928d; font-size: 14px; }
 footer { padding: 16px 24px 24px; }
