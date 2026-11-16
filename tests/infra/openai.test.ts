@@ -64,8 +64,8 @@ describe('Given OpenAI native function calling', () => {
   });
 });
 
-describe('Given Queens generation completion options', () => {
-  it('When forcing verify_puzzle Then forwards temperature 0.8 and cancellation without serializing the signal', async () => {
+describe('Given a tool-forced chat function completion', () => {
+  it('When forcing a tool with temperature and signal Then forwards the options and cancellation without serializing the signal', async () => {
     const controller = new AbortController();
     const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
       const body = JSON.parse(init!.body as string);
@@ -77,9 +77,30 @@ describe('Given Queens generation completion options', () => {
       assert.equal(init!.signal, controller.signal);
       return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [] } }] });
     } });
-    const result = await model.complete([{ role: 'user', content: '퍼즐 생성' }], [{ name: 'verify_puzzle', description: 'Verify puzzle', parameters: { type: 'object', properties: {}, additionalProperties: false, required: [] } }], {
+    const result = await model.complete([{ role: 'user', content: '퍼즐 검증' }], [{ name: 'verify_puzzle', description: 'Verify puzzle', parameters: { type: 'object', properties: {}, additionalProperties: false, required: [] } }], {
       temperature: 0.8, parallel_tool_calls: false, tool_choice: { type: 'function', function: { name: 'verify_puzzle' } }, signal: controller.signal,
     });
     assert.equal(result.ok, true);
+  });
+});
+
+describe('Given a JSON-mode completion without tools', () => {
+  it('When only response_format json_object is passed Then omits temperature, reasoning_effort, tools, and tool_choice from the request body', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
+      capturedBody = JSON.parse(init!.body as string) as Record<string, unknown>;
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '{"regions":[]}' } }] });
+    } });
+    const result = await model.complete(
+      [{ role: 'user', content: '영역 디자인' }],
+      { response_format: { type: 'json_object' } },
+    );
+    assert.equal(result.ok, true);
+    assert.ok(capturedBody);
+    assert.deepEqual(capturedBody.response_format, { type: 'json_object' });
+    assert.equal('temperature' in capturedBody, false);
+    assert.equal('reasoning_effort' in capturedBody, false);
+    assert.equal('tools' in capturedBody, false);
+    assert.equal('tool_choice' in capturedBody, false);
   });
 });

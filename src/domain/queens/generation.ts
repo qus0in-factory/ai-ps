@@ -1,10 +1,11 @@
 import type { Result } from '../chat.ts';
-import type { GeneratedPuzzle, PuzzleValidation } from './types.ts';
+import type { GeneratedPuzzle, PuzzleValidation, QueensSolution } from './types.ts';
 
 export const MAX_QUEENS_RETRIES = 10;
 export type GenerationEvent =
+  | { kind: 'placement'; attempt: number; solution: QueensSolution }
   | { kind: 'attempt'; attempt: number; retry: number }
-  | { kind: 'tool_call'; attempt: number; arguments: unknown }
+  | { kind: 'candidate'; attempt: number; regions: unknown }
   | { kind: 'validation'; attempt: number; report: PuzzleValidation }
   | { kind: 'feedback'; attempt: number; message: string }
   | { kind: 'complete'; attempt: number }
@@ -33,7 +34,8 @@ export function isGenerationEvent(value: unknown): value is GenerationEvent {
   if (!value || typeof value !== 'object' || !('kind' in value) || !('attempt' in value) ||
       !Number.isInteger(value.attempt) || Number(value.attempt) < 1 || Number(value.attempt) > MAX_QUEENS_RETRIES + 1) return false;
   if (value.kind === 'attempt') return 'retry' in value && value.retry === Number(value.attempt) - 1;
-  if (value.kind === 'tool_call') return 'arguments' in value;
+  if (value.kind === 'placement') return 'solution' in value && Array.isArray(value.solution);
+  if (value.kind === 'candidate') return 'regions' in value;
   if (value.kind === 'validation') return 'report' in value && isPuzzleValidation(value.report);
   if (value.kind === 'feedback') return 'message' in value && typeof value.message === 'string';
   if (value.kind === 'stopped') return 'reason' in value && typeof value.reason === 'string';

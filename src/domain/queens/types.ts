@@ -5,7 +5,7 @@ export interface QueenPosition { row: number; column: number }
 export type QueensSolution = QueenPosition[];
 export type QueensIssueCode = 'INVALID_GRID' | 'REGION_COUNT' | 'DISCONNECTED_REGION' |
   'QUEEN_COUNT' | 'INVALID_POSITION' | 'DUPLICATE_CELL' | 'ROW_CONFLICT' | 'COLUMN_CONFLICT' |
-  'REGION_CONFLICT' | 'ADJACENT_QUEENS' | 'NO_SOLUTION' | 'MULTIPLE_SOLUTIONS' | 'SEARCH_LIMIT';
+  'REGION_CONFLICT' | 'REGION_TOO_SMALL' | 'ADJACENT_QUEENS' | 'NO_SOLUTION' | 'MULTIPLE_SOLUTIONS' | 'SEARCH_LIMIT';
 export interface QueensIssue {
   code: QueensIssueCode;
   message: string;

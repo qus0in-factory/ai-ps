@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
   const listener = getRequestListener(createApi({
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),
-    queen: createQueensGenerator(model, tools.find(tool => tool.definition.name === 'verify_puzzle')!, createQueensLogger(logger)),
+    queen: createQueensGenerator(model, { log: createQueensLogger(logger) }),
   }).fetch);
   const api = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     if (req.url?.split('?')[0].startsWith('/api/')) listener(req, res);

@@ -9,8 +9,11 @@ export function GenerationLog(props: { events: GenerationEvent[] }) {
         <ol><For each={props.events}>{(event) => (
           <li>
             <Show when={event.kind === 'attempt'}><strong>{event.kind === 'attempt' && `생성 ${event.attempt}회 · 재시도 ${event.retry}/10`}</strong></Show>
-            <Show when={event.kind === 'tool_call'}>
-              <details><summary>verify_puzzle 호출</summary><pre>{event.kind === 'tool_call' && JSON.stringify(event.arguments, null, 2)}</pre></details>
+            <Show when={event.kind === 'placement'}>
+              <span>{event.kind === 'placement' && `정답 배치 생성 · ${event.solution.map((q) => `(${q.row}, ${q.column})`).join(', ')}`}</span>
+            </Show>
+            <Show when={event.kind === 'candidate'}>
+              <details><summary>영역 디자인 제안</summary><pre>{event.kind === 'candidate' && JSON.stringify(event.regions, null, 2)}</pre></details>
             </Show>
             <Show when={event.kind === 'validation'}>
               <details><summary>{event.kind === 'validation' && (event.report.valid ? '검증 통과 · 정답 1개' : `검증 실패 · ${event.report.issues.map(issue => issue.code).join(', ')}`)}</summary>

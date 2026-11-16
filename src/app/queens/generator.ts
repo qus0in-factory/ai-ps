@@ -1,72 +1,111 @@
-import type { CompletionMessage, FunctionCompletionGateway } from '../../domain/completion.ts';
-import { validateGrid } from '../../domain/queens/grid.ts';
-import { isPuzzleValidation, MAX_QUEENS_RETRIES, type GenerationListener, type QueensGenerator } from '../../domain/queens/generation.ts';
-import type { PuzzleValidation } from '../../domain/queens/types.ts';
-import type { Tool } from '../../domain/tools.ts';
+import type { ChatMessage } from '../../domain/chat.ts';
+import type { CompletionGateway } from '../../domain/completion.ts';
+import { validateDesign } from '../../domain/queens/design.ts';
+import { MAX_QUEENS_RETRIES, type GenerationListener, type QueensGenerator } from '../../domain/queens/generation.ts';
+import { createRandomSolution } from '../../domain/queens/random-solution.ts';
+import type { PuzzleValidation, QueensPuzzle, QueensSolution, RegionId } from '../../domain/queens/types.ts';
 
-const invalid = (message: string): PuzzleValidation => ({ valid: false, solutionStatus: 'invalid', solutions: [], nodesVisited: 0,
-  issues: [{ code: 'INVALID_GRID', message }] });
+interface GeneratorOptions {
+  place?: (size: number) => QueensSolution;
+  log?: GenerationListener;
+}
 
-export function createQueensGenerator(model: FunctionCompletionGateway, verify: Tool, log?: GenerationListener): QueensGenerator {
+function invalid(message: string): PuzzleValidation {
+  return { valid: false, solutionStatus: 'invalid', solutions: [], nodesVisited: 0,
+    issues: [{ code: 'INVALID_GRID', message }] };
+}
+
+function systemPrompt(size: number): string {
+  return [
+    'You are a color region designer for LinkedIn Queens puzzles.',
+    `You receive a fixed queen placement on a ${size}×${size} grid.`,
+    'Do not move, add or remove the given queens. Your job is only to color the grid so that the given placement is the ONLY solution.',
+    '',
+    'Region rules:',
+    `- The grid is exactly ${size}×${size}.`,
+    `- Use exactly ${size} regions with integer IDs 0..${size - 1}.`,
+    `- Every cell belongs to exactly one region.`,
+    '- Each region is connected through shared up/down/left/right edges, not only diagonally.',
+    '- Each region contains exactly one of the given queens.',
+    '- Each region must have at least 2 cells.',
+    '',
+    'Queens rules the finished puzzle must follow:',
+    '- Exactly one queen in each row, each column and each region.',
+    '- Queens cannot touch, even diagonally. Distant diagonals are allowed.',
+    '',
+    'How to force uniqueness:',
+    '- Shape region borders so that every other one-per-row, one-per-column placement would put two queens in one region or leave a region without a queen.',
+    '- Block the cells where an alternative queen could otherwise sit while keeping each region connected and at least 2 cells.',
+    '- Before answering, mentally check that no second non-touching placement satisfies all constraints.',
+    '',
+    `Output only JSON: {"regions": [[...]]} with ${size} arrays of ${size} integer region IDs, top row first.`,
+    'No explanation, no markdown fences, no extra keys.',
+  ].join('\n');
+}
+
+function userPrompt(size: number, solution: QueensSolution): string {
+  const queens = solution.map(queen => `(${queen.row},${queen.column})`).join(', ');
+  const grid = Array.from({ length: size }, (_, row) => Array.from({ length: size }, (_, column) =>
+    solution.some(queen => queen.row === row && queen.column === column) ? 'Q' : '.').join(' ')).join('\n');
+  return [
+    `Design the ${size} color regions for this ${size}×${size} Queens grid.`,
+    `Queens (row,column) in row order: ${queens}`,
+    'Grid (Q = given queen, . = empty):',
+    grid,
+  ].join('\n');
+}
+
+export function createQueensGenerator(model: CompletionGateway, options: GeneratorOptions = {}): QueensGenerator {
+  const place = options.place ?? ((size: number) => createRandomSolution(size, Math.random));
   return {
     async generate(size, onEvent, signal) {
       if (!Number.isInteger(size) || size < 5 || size > 9) return { ok: false, reason: '격자 크기는 5부터 9까지의 정수여야 합니다.' };
-      const emit: GenerationListener = (event) => { log?.(event); onEvent?.(event); };
+      if (signal?.aborted) return { ok: false, reason: '퍼즐 생성을 중단했습니다.' };
+      const emit: GenerationListener = (event) => { options.log?.(event); onEvent?.(event); };
       const stop = (reason: string, attempt: number) => {
         emit({ kind: 'stopped', attempt, reason });
         return { ok: false as const, reason };
       };
-      const messages: CompletionMessage[] = [{ role: 'system', content: [
-        'Create a LinkedIn Queens puzzle directly. You are responsible for inventing the entire colored grid yourself.',
-        `The requested size is exactly ${size}×${size}. Provide size:${size} and a square regions matrix of integer color IDs.`,
-        `There must be exactly ${size} color regions. Every cell belongs to one region. Each region must be connected by up/down/left/right edges, not just diagonally.`,
-        `A solution places exactly ${size} queens: one in each row, each column, and each color region. Queens cannot touch, even diagonally. Distant diagonals are allowed.`,
-        'The puzzle must have exactly one solution. Always call verify_puzzle with your full proposed grid to check it.',
-        'When validation fails, read all issues and the example solutions if present. Revise the grid and call verify_puzzle again.',
-        'Do not output a solved placement, explanation, planning steps or a procedural generation algorithm. Propose the whole grid directly.',
-      ].join('\n') }, { role: 'user', content: `${size}×${size} Queens 퍼즐을 만들어 verify_puzzle로 검증해주세요.` }];
-      for (let retry = 0; retry <= MAX_QUEENS_RETRIES; retry++) {
-        const attempt = retry + 1;
+
+      const solution = place(size);
+      emit({ kind: 'placement', attempt: 1, solution });
+
+      const messages: ChatMessage[] = [
+        { role: 'system', content: systemPrompt(size) },
+        { role: 'user', content: userPrompt(size, solution) },
+      ];
+      for (let attempt = 1; attempt <= MAX_QUEENS_RETRIES + 1; attempt++) {
         if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
-        emit({ kind: 'attempt', attempt, retry });
-        const response = await model.complete(messages, [verify.definition], {
-          temperature: 0.8, parallel_tool_calls: false,
-          tool_choice: { type: 'function', function: { name: 'verify_puzzle' } }, signal,
-        });
+        emit({ kind: 'attempt', attempt, retry: attempt - 1 });
+        const response = await model.complete(messages, { response_format: { type: 'json_object' }, signal });
+        if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
         if (!response.ok) return stop(response.reason, attempt);
-        if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
-        const message = response.value;
-        const calls = message.tool_calls ?? [];
-        messages.push(message);
-        let feedback = 'verify_puzzle 도구를 정확히 한 번 호출하고 전체 격자를 제출해주세요.';
-        if (!calls.length) {
-          messages.push({ role: 'user', content: feedback });
-        } else {
-          for (const call of calls) {
-            let args: unknown;
-            let report: PuzzleValidation;
-            try { args = JSON.parse(call.function.arguments); }
-            catch { args = null; }
-            emit({ kind: 'tool_call', attempt, arguments: args });
-            if (calls.length !== 1 || call.function.name !== 'verify_puzzle') report = invalid(feedback);
-            else if (!args || typeof args !== 'object' || !('size' in args) || args.size !== size) report = invalid(`요청한 크기는 ${size}×${size}입니다. size와 regions 크기를 맞춰주세요.`);
-            else {
-              const checked = await verify.execute(args);
-              report = checked.ok && isPuzzleValidation(checked.value) ? checked.value : invalid(checked.ok ? '검증 결과를 읽지 못했습니다.' : checked.reason);
-            }
-            emit({ kind: 'validation', attempt, report });
-            messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(report) });
-            if (report.valid && report.solutionStatus === 'unique') {
-              const grid = validateGrid(args);
-              if (grid.valid && report.solutions[0]) {
-                emit({ kind: 'complete', attempt });
-                return { ok: true, value: { puzzle: grid.puzzle, solution: report.solutions[0], attempts: attempt } };
-              }
-            }
-            feedback = report.issues.map(issue => `${issue.code}: ${issue.message}`).join('\n') || '유일한 정답이 있는지 확정하지 못했습니다.';
-          }
-          messages.push({ role: 'user', content: `검증 실패입니다. 다음 피드백을 바탕으로 격자를 수정하세요.\n${feedback}` });
+
+        const content = response.value.content ?? '';
+        let regions: unknown = null;
+        let parsed = true;
+        try {
+          const data: unknown = JSON.parse(content);
+          if (data && typeof data === 'object' && 'regions' in data) regions = (data as { regions: unknown }).regions;
+          else parsed = false;
+        } catch { parsed = false; }
+        emit({ kind: 'candidate', attempt, regions });
+
+        const report = parsed
+          ? validateDesign({ size, regions: regions as RegionId[][] }, solution)
+          : invalid('응답이 {"regions": [...]} 형태의 JSON이 아닙니다. 크기에 맞는 영역 행렬만 출력하세요.');
+        emit({ kind: 'validation', attempt, report });
+
+        if (report.valid && report.solutionStatus === 'unique') {
+          emit({ kind: 'complete', attempt });
+          const puzzle: QueensPuzzle = { size, regions: regions as RegionId[][] };
+          return { ok: true, value: { puzzle, solution: report.solutions[0] ?? solution, attempts: attempt } };
         }
+
+        const feedback = report.issues.map(issue => `${issue.code}: ${issue.message}`).join('\n') ||
+          'UNKNOWN: 검증 결과를 확인하지 못했습니다.';
+        messages.push({ role: 'assistant', content });
+        messages.push({ role: 'user', content: `The region design failed validation. Fix every issue below and return the full ${size}×${size} regions matrix as JSON.\n${feedback}` });
         emit({ kind: 'feedback', attempt, message: feedback });
       }
       return stop(`최초 생성과 ${MAX_QUEENS_RETRIES}회 재시도 후에도 유일한 정답을 가진 퍼즐을 만들지 못했습니다.`, MAX_QUEENS_RETRIES + 1);
