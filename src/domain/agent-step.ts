@@ -1,7 +1,7 @@
 import type { Result } from './chat.ts';
 import { isExecutionPlan, type ExecutionPlan } from './execution-plan.ts';
 
-export type AgentStep =
+export type AgentStep = (
   | { kind: 'planning' }
   | { kind: 'plan'; plan: ExecutionPlan }
   | { kind: 'execution'; id: number; title: string; status: 'running' | 'completed' | 'failed'; result?: Result<unknown> }
@@ -9,12 +9,13 @@ export type AgentStep =
   | { kind: 'thought'; summary: string }
   | { kind: 'action'; name: string; arguments: Record<string, unknown> }
   | { kind: 'observation'; name: string; result: Result<unknown> }
-  | { kind: 'stopped'; reason: string };
+  | { kind: 'stopped'; reason: string }) & { stepId?: number };
 
 export type StepListener = (step: AgentStep) => void;
 
 export function isAgentStep(value: unknown): value is AgentStep {
   if (!value || typeof value !== 'object' || !('kind' in value)) return false;
+  if ('stepId' in value && (!Number.isInteger(value.stepId) || Number(value.stepId) < 1)) return false;
   if (value.kind === 'planning' || value.kind === 'answer') return true;
   if (value.kind === 'plan') return 'plan' in value && isExecutionPlan(value.plan);
   if (value.kind === 'execution') return 'id' in value && Number.isInteger(value.id) &&

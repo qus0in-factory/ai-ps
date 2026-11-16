@@ -1,5 +1,8 @@
 import { For, Show } from 'solid-js';
-import type { AgentStep } from '../domain/agent-step.ts';
+import type { AgentStep } from '../../../domain/agent-step.ts';
+
+import { ReActTrace } from './ReActTrace.tsx';
+import './PlanTrace.css';
 
 type PlanEvent = Extract<AgentStep, { kind: 'plan' }>;
 type ExecutionEvent = Extract<AgentStep, { kind: 'execution' }>;
@@ -30,6 +33,7 @@ export function PlanTrace(props: { steps: AgentStep[]; pending?: boolean }) {
               <For each={plan()!.steps}>{(step) => (
                 <li>
                   <span class="step-status">{status(step.id)}</span><span>{step.title}</span>
+                  <ReActTrace steps={props.steps.filter((event) => event.stepId === step.id)} />
                   <Show when={execution(step.id)?.result}>
                     <details>
                       <summary>실행 결과 보기</summary>
@@ -45,7 +49,7 @@ export function PlanTrace(props: { steps: AgentStep[]; pending?: boolean }) {
       <Show when={props.pending && props.steps.some((step) => step.kind === 'answer')}>
         <section class="answer-section"><h3>최종 답변</h3><p>실행 결과를 모아 답변을 작성하고 있어요…</p></section>
       </Show>
-      <For each={props.steps.filter((step) => step.kind === 'stopped')}>{(step) => <p>{step.reason}</p>}</For>
+      <For each={props.steps.filter((step): step is Extract<AgentStep, { kind: 'stopped' }> => step.kind === 'stopped' && !step.stepId)}>{(step) => <p>{step.reason}</p>}</For>
     </section>
   );
 }

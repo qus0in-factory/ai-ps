@@ -16,12 +16,12 @@ export type ToolResponse =
   | { type: 'message'; content: string; thought?: string }
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; thought?: string };
 
-export type ToolLogEvent =
-  | { event: 'model_request'; turn: number; phase?: 'planning' | 'answer' }
-  | { event: 'model_response'; turn: number; content: string | null; phase?: 'planning' | 'answer' }
-  | { event: 'model_error' | 'parse_error' | 'loop_stopped'; turn: number; reason: string; phase?: 'planning' | 'answer' }
+export type ToolLogEvent = (
+  | { event: 'model_request'; turn: number }
+  | { event: 'model_response'; turn: number; content: string | null }
+  | { event: 'model_error' | 'parse_error' | 'loop_stopped'; turn: number; reason: string }
   | { event: 'plan_created'; turn: number; plan: ExecutionPlan }
   | { event: 'tool_call'; turn: number; name: string; arguments: Record<string, unknown> }
-  | { event: 'tool_result'; turn: number; name: string; result: Result<unknown> };
+  | { event: 'tool_result'; turn: number; name: string; result: Result<unknown> }) & { phase?: 'planning' | 'execution' | 'answer'; stepId?: number };
 
 export type ToolLogger = (entry: ToolLogEvent) => void;

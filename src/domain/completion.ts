@@ -22,12 +22,17 @@ export interface FunctionCompletionGateway {
 }
 
 export interface CompletionGateway {
-  complete(messages: ChatMessage[]): Promise<Result<AssistantMessage>>;
+  complete(messages: ChatMessage[], options?: CompletionOptions): Promise<Result<AssistantMessage>>;
+}
+
+export interface CompletionOptions {
+  response_format?: { type: 'json_object' };
 }
 
 export interface CompletionParams {
   model: string;
   messages: CompletionMessage[];
+  response_format?: CompletionOptions['response_format'];
   tools?: { type: 'function'; function: ToolDefinition & { strict: true } }[];
   reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   temperature?: number;

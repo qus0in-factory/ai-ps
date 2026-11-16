@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@solidjs/router':
+        specifier: ^1.0.3
+        version: 1.0.3(solid-js@1.9.19)
       dompurify:
         specifier: ^3.4.18
         version: 3.4.18
@@ -296,6 +299,11 @@ packages:
 
   '@rolldown/pluginutils@1.1.1':
     resolution: {integrity: sha512-glFIJDvLNDtJhT9qrMFWLPbvS+skxgt4L0K8Ei2YtnhPysAJnsI7nyxSJxKj4ADeKX0OLjC4ntRkwpLOoS3rwA==}
+
+  '@solidjs/router@1.0.3':
+    resolution: {integrity: sha512-EULOxZNMGISNgQU+uXLtt6o4X5bIE+0HiPW0gGSOyl3HJmyClSDDHLGJ5JTHkbiyUSc6DttVvnVZYfK1a+70BA==}
+    peerDependencies:
+      solid-js: ^1.8.6
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -1189,6 +1197,10 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.1.1': {}
+
+  '@solidjs/router@1.0.3(solid-js@1.9.19)':
+    dependencies:
+      solid-js: 1.9.19
 
   '@tybys/wasm-util@0.10.4':
     dependencies:

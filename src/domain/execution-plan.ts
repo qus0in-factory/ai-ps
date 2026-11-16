@@ -5,8 +5,9 @@ export const MAX_PLAN_STEPS = 4;
 export interface PlanTask {
   id: number;
   title: string;
-  name: string;
-  arguments: Record<string, unknown>;
+  instruction?: string;
+  name?: string;
+  arguments?: Record<string, unknown>;
 }
 
 export interface ExecutionPlan {
@@ -22,8 +23,9 @@ export function isExecutionPlan(value: unknown): value is ExecutionPlan {
     Array.isArray(plan.steps) && plan.steps.length <= MAX_PLAN_STEPS &&
     plan.steps.every((step, index) => step && step.id === index + 1 &&
       typeof step.title === 'string' && !!step.title.trim() &&
-      typeof step.name === 'string' && !!step.name.trim() &&
-      step.arguments && typeof step.arguments === 'object' && !Array.isArray(step.arguments));
+      ((typeof step.instruction === 'string' && !!step.instruction.trim()) ||
+        (typeof step.name === 'string' && !!step.name.trim() && step.arguments &&
+          typeof step.arguments === 'object' && !Array.isArray(step.arguments))));
 }
 
 export function parseExecutionPlan(content: string): Result<ExecutionPlan> {
@@ -38,5 +40,5 @@ export function parseExecutionPlan(content: string): Result<ExecutionPlan> {
     }
   }
   return isExecutionPlan(value) ? { ok: true, value }
-    : { ok: false, reason: `계획은 목표와 순서가 있는 최대 ${MAX_PLAN_STEPS}개의 도구 실행 단계여야 합니다.` };
+    : { ok: false, reason: `계획은 목표와 순서가 있는 최대 ${MAX_PLAN_STEPS}개의 실행 단계여야 합니다.` };
 }

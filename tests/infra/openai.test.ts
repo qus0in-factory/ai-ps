@@ -20,7 +20,7 @@ describe('Given OpenAI completion wired to OpenWeather tools', () => {
       assert.equal(body.model, 'test-model');
       assert.equal(body.tools, undefined);
       assert.equal(body.tool_choice, undefined);
-      assert.equal(body.response_format, undefined);
+      assert.deepEqual(body.response_format, { type: 'json_object' });
       assert.equal(body.messages[0].role, 'system');
       assert.ok(body.messages[0].content.includes('get_current_weather'));
       assert.equal(body.stream, false);
@@ -49,6 +49,7 @@ describe('Given OpenAI native function calling', () => {
   it('When tools are provided Then sends the native schema and reasoning_effort none', async () => {
     const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
       const body = JSON.parse(init!.body as string);
+      assert.equal(body.response_format, undefined);
       assert.equal(body.tools[0].type, 'function');
       assert.equal(body.tools[0].function.name, 'get_current_time');
       assert.equal(body.tools[0].function.strict, true);

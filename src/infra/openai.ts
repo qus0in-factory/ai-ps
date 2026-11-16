@@ -1,4 +1,4 @@
-import type { CompletionGateway, CompletionMessage, CompletionParams, CompletionResponse, FunctionCompletionGateway } from '../domain/completion.ts';
+import type { CompletionGateway, CompletionMessage, CompletionOptions, CompletionParams, CompletionResponse, FunctionCompletionGateway } from '../domain/completion.ts';
 import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
 
@@ -46,7 +46,9 @@ export function createOpenAICompletion(
   config: { model?: string; apiKey?: string; fetcher?: typeof fetch },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
-    async complete(messages: CompletionMessage[], tools: ToolDefinition[] = []) {
+    async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}) {
+      const tools = Array.isArray(options) ? options : [];
+      const responseFormat = Array.isArray(options) ? undefined : options.response_format;
       const model = config.model?.trim();
       if (!model) return { ok: false, reason: 'OPENAI_MODEL을 .env에 설정해주세요.' };
       const functions = tools.map((definition) => ({
@@ -54,6 +56,7 @@ export function createOpenAICompletion(
       }));
       const result = await completion({
         model, messages,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
       }, {
         apiKey: config.apiKey, fetcher: config.fetcher,

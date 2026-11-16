@@ -1,0 +1,5 @@
+.index-page { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
+.index-page h1 { margin: 0 0 24px; font-size: 24px; font-weight: 600; }
+.page-link { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border: 1px solid #ddddd7; border-radius: 14px; background: white; color: #242424; text-decoration: none; }
+.page-link:hover { border-color: #888880; }
+.page-link:focus-visible { outline: 2px solid #62625c; outline-offset: 3px; }

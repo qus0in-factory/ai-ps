@@ -1,0 +1,5 @@
+.message-bubble { margin-bottom: 24px; }
+.message-bubble .role { font-size: 12px; font-weight: 600; color: #62625c; }
+.message-bubble .user-text { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-bubble.user { margin-left: auto; max-width: 85%; width: fit-content; background: #eeeee9; padding: 12px 18px; border-radius: 16px; }
+.final-answer-label { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #292925; }

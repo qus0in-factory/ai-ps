@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
-import { renderMarkdown } from '../../src/ui/markdown.ts';
+import { renderMarkdown } from '../../../../src/ui/components/markdown/markdown.ts';
 
 const window = new JSDOM('').window;
 const purifier = createDOMPurify(window);

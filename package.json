@@ -5,7 +5,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/**/*.test.ts"
+    "test": "node --test \"tests/**/*.test.ts\""
   },
   "devDependencies": {
     "@babel/parser": "^8.1.2",
@@ -18,6 +18,7 @@
     "vite-plugin-solid": "^2.11.16"
   },
   "dependencies": {
+    "@solidjs/router": "^1.0.3",
     "dompurify": "^3.4.18",
     "marked": "^18.2.0",
     "pino": "^10.4.0",

@@ -3,7 +3,11 @@ import type { CompletionGateway } from '../domain/completion.ts';
 import { parseToolResponse, toolCallKey } from '../domain/tool-response.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
 
-export function createToolChat(model: CompletionGateway, tools: Tool[], log?: ToolLogger): ChatGateway {
+export function createToolChat(
+  model: CompletionGateway, tools: Tool[], log?: ToolLogger,
+  options: { instructions?: string; maxTurns?: number } = {},
+): ChatGateway {
+  const maxTurns = Math.max(2, Math.min(5, options.maxTurns ?? 5));
   const prompt = [
     'You are a helpful assistant. Reply in the language used by the user.',
     'Every response MUST be exactly one JSON object. No markdown fences or text outside JSON.',
@@ -21,8 +25,9 @@ export function createToolChat(model: CompletionGateway, tools: Tool[], log?: To
     'For a temperature comparison, fetch get_current_weather separately for EACH requested city. After both observations, report both temperature_c values, the difference in Celsius, and which city is warmer. Do not compare using old chat history or invented data.',
     'If either city lookup fails, explain what is missing; do not fabricate a comparison.',
     'Never repeat an identical tool and arguments in the same request. Use the observation already received.',
-    'You have at most 5 model turns and 4 tool calls. Finish as soon as the required observations are available.',
+    `You have at most ${maxTurns} model turns and ${maxTurns - 1} tool calls. Finish as soon as the required observations are available.`,
     `Registered tools: ${JSON.stringify(tools.map((tool) => tool.definition))}`,
+    options.instructions ?? '',
   ].join('\n');
 
   return {
@@ -38,9 +43,9 @@ export function createToolChat(model: CompletionGateway, tools: Tool[], log?: To
         onStep?.({ kind: 'stopped', reason });
         return { ok: false, reason };
       };
-      for (let turn = 1; turn <= 5; turn++) {
+      for (let turn = 1; turn <= maxTurns; turn++) {
         log?.({ event: 'model_request', turn });
-        const result = await model.complete(conversation);
+        const result = await model.complete(conversation, { response_format: { type: 'json_object' } });
         if (!result.ok) {
           log?.({ event: 'model_error', turn, reason: result.reason });
           return result;
@@ -51,7 +56,7 @@ export function createToolChat(model: CompletionGateway, tools: Tool[], log?: To
         const parsed = parseToolResponse(content ?? '');
         if (!parsed.ok) {
           log?.({ event: 'parse_error', turn, reason: parsed.reason });
-          if (formatRetries === 0 && turn < 5) {
+          if (formatRetries === 0 && turn < maxTurns) {
             formatRetries++;
             if (content) conversation.push({ role: 'assistant', content });
             conversation.push({
@@ -67,7 +72,7 @@ export function createToolChat(model: CompletionGateway, tools: Tool[], log?: To
         if (action.type === 'message') return { ok: true, value: action.content };
         const key = toolCallKey(action.name, action.arguments);
         if (called.has(key)) return stop(turn, '같은 도구 요청이 반복되어 실행을 중단했습니다.');
-        if (turn === 5) return stop(turn, '실행 횟수 제한에 도달해 도구 호출을 중단했습니다.');
+        if (turn === maxTurns) return stop(turn, '실행 횟수 제한에 도달해 도구 호출을 중단했습니다.');
         called.add(key);
         if (!action.thought) onStep?.({ kind: 'thought', summary: `${action.name} 도구로 필요한 정보를 조회합니다.` });
         onStep?.({ kind: 'action', name: action.name, arguments: action.arguments });
@@ -83,7 +88,7 @@ export function createToolChat(model: CompletionGateway, tools: Tool[], log?: To
           { role: 'user', content: JSON.stringify({ type: 'tool_result', name: action.name, result: output }) },
         );
       }
-      return stop(5, '도구 호출 횟수를 초과했습니다. 다시 질문해주세요.');
+      return stop(maxTurns, '도구 호출 횟수를 초과했습니다. 다시 질문해주세요.');
     },
   };
 }
