@@ -23,3 +23,54 @@ describe('Given the HTTP chat adapter', () => {
     assert.deepEqual(await chat.complete(messages), { ok: false, reason: '응답을 가져오지 못했습니다. (HTTP 502)' });
   });
 });
+
+describe('Given streaming agent progress', () => {
+  it('When a final frame arrives without connection closure Then finishes immediately', { timeout: 1000 }, async () => {
+    for (const frame of [
+      { type: 'result', content: '완료된 답변입니다.' },
+      { type: 'problem', problem: { detail: '조회에 실패했습니다.' } },
+    ]) {
+      let cancelled = false;
+      const chat = createHttpChat(async () => new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new TextEncoder().encode(JSON.stringify(frame) + '\n')); },
+        cancel() { cancelled = true; },
+      }), { headers: { 'Content-Type': 'application/x-ndjson' } }));
+      assert.deepEqual(await chat.complete(messages), frame.type === 'result'
+        ? { ok: true, value: frame.content } : { ok: false, reason: frame.problem!.detail });
+      assert.equal(cancelled, true);
+    }
+  });
+
+  it('When a stream stalls Then times out and cancels the body', { timeout: 1000 }, async () => {
+    let cancelled = false;
+    const chat = createHttpChat(async () => new Response(new ReadableStream({
+      start() {},
+      cancel() { cancelled = true; },
+    }), { headers: { 'Content-Type': 'application/x-ndjson' } }), 20);
+    const result = await chat.complete(messages);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /시간.*초과/);
+    assert.equal(cancelled, true);
+  });
+
+  it('When JSON and Korean text span network chunks Then emits steps and returns the final answer', async () => {
+    const step = { kind: 'thought', summary: '서울의 온도를 확인합니다.' };
+    const bytes = new TextEncoder().encode(JSON.stringify({ type: 'step', step }) + '\n' + JSON.stringify({ type: 'result', content: '부산이 5°C 높습니다.' }) + '\n');
+    const received: unknown[] = [];
+    const chat = createHttpChat(async () => new Response(new ReadableStream({
+      start(controller) {
+        for (let offset = 0; offset < bytes.length; offset += 7) controller.enqueue(bytes.slice(offset, offset + 7));
+        controller.close();
+      },
+    }), { headers: { 'Content-Type': 'application/x-ndjson' } }));
+    assert.deepEqual(await chat.complete(messages, (step) => received.push(step)), { ok: true, value: '부산이 5°C 높습니다.' });
+    assert.deepEqual(received, [step]);
+  });
+
+  it('When a stream reports a problem Then returns its detail', async () => {
+    const chat = createHttpChat(async () => new Response(JSON.stringify({ type: 'problem', problem: {
+      type: 'about:blank', title: 'Bad Gateway', status: 502, detail: '반복 호출을 중단했습니다.', instance: '/api/chat',
+    } }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } }));
+    assert.deepEqual(await chat.complete(messages), { ok: false, reason: '반복 호출을 중단했습니다.' });
+  });
+});

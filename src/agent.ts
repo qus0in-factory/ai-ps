@@ -5,18 +5,20 @@ import { createToolChat } from './app/tool-chat.ts';
 import { createFunctionToolChat } from './app/function-tool-chat.ts';
 import { createTools } from './infra/tools.ts';
 import { createToolLogger } from './infra/tool-logger.ts';
+import { createLogger } from './infra/logger.ts';
 
 loadEnvFile('.env');
-const createGateway = process.env.OPENAI_TOOL_MODE === 'json' ? createToolChat : createFunctionToolChat;
+const logger = createLogger();
+const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat : createToolChat;
 const gateway = createGateway(createOpenAICompletion({
   model: process.env.OPENAI_MODEL,
   apiKey: process.env.OPENAI_API_KEY,
-}), createTools({ apiKey: process.env.OWM_API_KEY }), createToolLogger());
+}), createTools({ apiKey: process.env.OWM_API_KEY }), createToolLogger(logger));
 const result = await gateway.complete([
   { role: 'user', content: process.argv.slice(2).join(' ') || '안녕하세요!' },
 ]);
-if (result.ok) console.log(result.value);
+if (result.ok) logger.info({ event: 'answer', content: result.value }, '답변 완료');
 else {
-  console.error(result.reason);
+  logger.error({ event: 'request_error', reason: result.reason }, '요청 실패');
   process.exitCode = 1;
 }

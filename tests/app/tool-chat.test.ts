@@ -90,6 +90,51 @@ describe('Given a chat using prompted JSON tool calls', () => {
       return answer('{"type":"tool_call","name":"unknown","arguments":{}}');
     } }, []);
     assert.equal((await chat.complete([{ role: 'user', content: '날씨' }])).ok, false);
-    assert.equal(count, 5);
+    assert.equal(count, 2);
+  });
+});
+
+describe('Given a ReAct JSON temperature comparison', () => {
+  it('When two cities are requested Then observes both temperatures before answering and emits progress', async () => {
+    const cities: string[] = [];
+    const steps: unknown[] = [];
+    let turn = 0;
+    const chat = createToolChat({ complete: async (messages) => {
+      if (turn++ === 0) return answer(JSON.stringify({ type: 'tool_call', thought: '먼저 서울의 현재 온도를 조회합니다.', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } }));
+      if (turn === 2) {
+        assert.equal(JSON.parse(messages.at(-1)!.content).result.value.temperature_c, 10);
+        return answer(JSON.stringify({ type: 'tool_call', thought: '부산의 온도를 조회해 비교합니다.', name: 'get_current_weather', arguments: { city: 'Busan,KR' } }));
+      }
+      assert.equal(JSON.parse(messages.at(-1)!.content).result.value.temperature_c, 15);
+      return answer('{"type":"message","content":"서울 10°C, 부산 15°C로 부산이 5°C 높습니다."}');
+    } }, [{ definition, execute: async (args) => {
+      const city = (args as { city: string }).city;
+      cities.push(city);
+      return { ok: true, value: { city, temperature_c: city === 'Seoul,KR' ? 10 : 15 } };
+    } }]);
+    const result = await chat.complete([{ role: 'user', content: '서울과 부산의 현재 온도를 비교해줘' }], (step) => steps.push(step));
+    assert.deepEqual(cities, ['Seoul,KR', 'Busan,KR']);
+    assert.deepEqual(result, { ok: true, value: '서울 10°C, 부산 15°C로 부산이 5°C 높습니다.' });
+    assert.equal(steps.length, 6);
+  });
+
+  it('When the same action repeats Then stops without executing it twice', async () => {
+    let calls = 0;
+    const chat = createToolChat({ complete: async () => answer('{"type":"tool_call","name":"get_current_weather","arguments":{"city":"Seoul,KR"}}') }, [{
+      definition, execute: async () => { calls++; return { ok: true, value: { temperature_c: 10 } }; },
+    }]);
+    const result = await chat.complete([{ role: 'user', content: '날씨' }]);
+    assert.equal(result.ok, false);
+    assert.equal(calls, 1);
+  });
+
+  it('When each action is different but no final answer arrives Then stops at the step limit', async () => {
+    let calls = 0;
+    const chat = createToolChat({ complete: async () => {
+      calls++;
+      return answer(JSON.stringify({ type: 'tool_call', name: 'get_current_weather', arguments: { city: `City${calls}` } }));
+    } }, [{ definition, execute: async () => ({ ok: true, value: {} }) }]);
+    assert.equal((await chat.complete([{ role: 'user', content: '날씨' }])).ok, false);
+    assert.ok(calls <= 6);
   });
 });

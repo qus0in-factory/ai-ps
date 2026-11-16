@@ -5,19 +5,22 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createChatHandler } from '../../src/ui/chat-handler.ts';
 import { createReply, type Reply } from '../../src/app/chat.ts';
 
-async function request(method: string, body: string, reply: Reply) {
+async function request(method: string, body: string, reply: Reply, accept = '') {
   const req = Readable.from([Buffer.from(body)]) as IncomingMessage;
   req.method = method;
   req.url = '/api/chat';
+  req.headers = { accept };
   const headers: Record<string, string> = {};
   let payload = '';
   const res = {
     statusCode: 200,
     setHeader(name: string, value: string) { headers[name.toLowerCase()] = value; },
-    end(value: string) { payload = value; },
+    write(value: string) { payload += value; },
+    end(value = '') { payload += value; },
   };
   await createChatHandler(reply)(req, res as unknown as ServerResponse, () => assert.fail('Unexpected next'));
-  return { status: res.statusCode, headers, body: JSON.parse(payload) };
+  return { status: res.statusCode, headers, body: headers['content-type']?.startsWith('application/x-ndjson')
+    ? payload.trim().split('\n').map((line) => JSON.parse(line)) : JSON.parse(payload) };
 }
 
 describe('Given the chat HTTP endpoint', () => {
@@ -54,5 +57,27 @@ describe('Given the chat HTTP endpoint', () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers['content-type'], 'application/json; charset=utf-8');
     assert.deepEqual(response.body, { content: '안녕하세요' });
+  });
+
+  it('When progress streaming is requested Then sends steps before the final answer', async () => {
+    const step = { kind: 'thought' as const, summary: '서울과 부산을 비교합니다.' };
+    const reply = createReply({ complete: async (_messages, onStep) => {
+      onStep?.(step);
+      return { ok: true, value: '부산이 더 따뜻합니다.' };
+    } });
+    const response = await request('POST', '{"messages":[{"role":"user","content":"비교해줘"}]}', reply, 'application/x-ndjson');
+    assert.equal(response.headers['content-type'], 'application/x-ndjson; charset=utf-8');
+    assert.deepEqual(response.body, [{ type: 'step', step }, { type: 'result', content: '부산이 더 따뜻합니다.' }]);
+  });
+
+  it('When an error occurs after progress starts Then sends a Problem Details frame', async () => {
+    const reply = createReply({ complete: async (_messages, onStep) => {
+      onStep?.({ kind: 'thought', summary: '도구를 확인합니다.' });
+      return { ok: false, reason: '같은 도구 요청이 반복되었습니다.' };
+    } });
+    const response = await request('POST', '{"messages":[{"role":"user","content":"질문"}]}', reply, 'application/x-ndjson');
+    assert.deepEqual(response.body.at(-1), { type: 'problem', problem: {
+      type: 'about:blank', title: 'Bad Gateway', status: 502, detail: '같은 도구 요청이 반복되었습니다.', instance: '/api/chat',
+    } });
   });
 });

@@ -12,13 +12,13 @@ export interface Tool {
 }
 
 export type ToolResponse =
-  | { type: 'message'; content: string }
-  | { type: 'tool_call'; name: string; arguments: Record<string, unknown> };
+  | { type: 'message'; content: string; thought?: string }
+  | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; thought?: string };
 
 export type ToolLogEvent =
   | { event: 'model_request'; turn: number }
   | { event: 'model_response'; turn: number; content: string | null }
-  | { event: 'model_error' | 'parse_error'; turn: number; reason: string }
+  | { event: 'model_error' | 'parse_error' | 'loop_stopped'; turn: number; reason: string }
   | { event: 'tool_call'; turn: number; name: string; arguments: Record<string, unknown> }
   | { event: 'tool_result'; turn: number; name: string; result: Result<unknown> };
 

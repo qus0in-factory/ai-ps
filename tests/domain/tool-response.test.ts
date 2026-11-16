@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseToolResponse } from '../../src/domain/tool-response.ts';
+import { parseToolResponse, toolCallKey } from '../../src/domain/tool-response.ts';
 
 describe('Given JSON responses from a prompted model', () => {
   it('When JSON is fenced or surrounded by prose Then extracts and validates the object', () => {
@@ -19,5 +19,16 @@ describe('Given JSON responses from a prompted model', () => {
       '[{"type":"tool_call","name":"get_current_time","arguments":{}}]']) {
       assert.equal(parseToolResponse(content).ok, false);
     }
+  });
+
+  it('When a ReAct action includes a short thought Then preserves the visible action summary', () => {
+    const action = { type: 'tool_call', thought: '부산의 온도를 조회해 비교합니다.', name: 'get_current_weather', arguments: { city: 'Busan,KR' } };
+    assert.deepEqual(parseToolResponse(JSON.stringify(action)), { ok: true, value: action });
+  });
+
+  it('When equivalent requests use different key order or city casing Then detects the same call', () => {
+    assert.equal(toolCallKey('get_current_weather', { city: 'Seoul, KR' }), toolCallKey('get_current_weather', { city: 'seoul,kr' }));
+    assert.equal(toolCallKey('test', { a: 1, b: { c: 2, d: 3 } }), toolCallKey('test', { b: { d: 3, c: 2 }, a: 1 }));
+    assert.notEqual(toolCallKey('get_current_weather', { city: 'Seoul,KR' }), toolCallKey('get_current_weather', { city: 'Busan,KR' }));
   });
 });

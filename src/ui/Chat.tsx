@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { ChatController } from '../app/chat.ts';
 import { renderMarkdown } from './markdown.ts';
+import { AgentTrace } from './AgentTrace.tsx';
 import './style.css';
 
 export function Chat(props: { chat: ChatController }) {
@@ -30,11 +31,13 @@ export function Chat(props: { chat: ChatController }) {
             <article class={message.role}>
               <span class="role">{message.role === 'user' ? '나' : 'AI'}</span>
               <Show when={message.role === 'assistant'} fallback={<p>{message.content}</p>}>
+                <AgentTrace steps={message.steps ?? []} />
                 <div class="markdown" innerHTML={renderMarkdown(message.content)} />
               </Show>
             </article>
           )}</For>
         </Show>
+        <Show when={state().pending || state().error}><AgentTrace steps={state().steps} /></Show>
         <Show when={state().pending}><p class="waiting">답변을 작성하고 있어요…</p></Show>
         <div ref={bottom} />
       </section>

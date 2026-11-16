@@ -49,7 +49,7 @@ describe('Given a chat with an injected gateway', () => {
     const chat = createChat({ complete: async () => ({ ok: false, reason: '연결 오류' }) });
     await chat.send('질문');
     assert.deepEqual(chat.getState(), {
-      messages: [], draft: '질문', pending: false, error: '연결 오류',
+      messages: [], draft: '질문', pending: false, error: '연결 오류', steps: [],
     });
   });
 
@@ -58,5 +58,25 @@ describe('Given a chat with an injected gateway', () => {
     assert.deepEqual(await reply({ messages: [{ role: 'system', content: 'x' }] }), {
       ok: false, reason: '메시지를 확인해주세요.', status: 400,
     });
+  });
+});
+
+describe('Given visible agent progress', () => {
+  it('When an unexpected error escapes the gateway Then clears pending and restores the draft', async () => {
+    const chat = createChat({ complete: async () => { throw new Error('Unexpected failure'); } });
+    await chat.send('질문');
+    assert.equal(chat.getState().pending, false);
+    assert.equal(chat.getState().draft, '질문');
+    assert.ok(chat.getState().error);
+  });
+  it('When the agent works Then updates progress immediately and attaches it to the final answer', async () => {
+    const chat = createChat({ complete: async (_messages, onStep) => {
+      onStep?.({ kind: 'thought', summary: '두 도시의 온도를 조회합니다.' });
+      assert.equal(chat.getState().pending, true);
+      assert.equal(chat.getState().steps.length, 1);
+      return { ok: true, value: '부산이 더 따뜻합니다.' };
+    } });
+    await chat.send('서울 부산 비교');
+    assert.equal(chat.getState().messages.at(-1)?.steps?.length, 1);
   });
 });
