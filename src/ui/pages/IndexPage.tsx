@@ -11,7 +11,7 @@ export function IndexPage() {
           <span aria-hidden="true">→</span>
         </A>
         <A href="/queen" class="page-link"><span>Queens</span><span aria-hidden="true">→</span></A>
-        <A href="/adventure" class="page-link"><span>잿빛 등대</span><span aria-hidden="true">→</span></A>
+        <A href="/adventure" class="page-link"><span>Adventure</span><span aria-hidden="true">→</span></A>
       </nav>
     </main>
   );
