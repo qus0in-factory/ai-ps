@@ -49,3 +49,21 @@
   .talk-message { max-width: 100%; }
   .talk-actions > button { flex: 1 1 auto; }
 }
+
+.talk-portrait { width: 128px; height: 128px; object-fit: contain; image-rendering: pixelated; flex-shrink: 0; }
+.talk-tutor-choice { border: 0; padding: 0; margin: 24px 0; min-width: 0; }
+.talk-tutor-choice legend { font-size: .9rem; font-weight: 600; margin-bottom: 12px; }
+.talk-tutor-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 360px; }
+.talk-tutor-option { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 12px 4px; font: inherit; color: #305c50; background: #fff; border: 2px solid #9eafa3; border-radius: 14px; cursor: pointer; }
+.talk-tutor-option[aria-pressed="true"] { border-color: #245344; background: #e5efe8; box-shadow: 0 0 0 1px #245344; }
+.talk-tutor-option span { font-size: .78rem; }
+.talk-tutor-option:disabled { cursor: wait; opacity: .65; }
+.talk-tutor-option .talk-portrait { width: min(128px, 100%); height: auto; aspect-ratio: 1; }
+.talk-current-tutor { display: flex; align-items: center; gap: 16px; position: sticky; top: 8px; z-index: 1; margin: 20px 0; padding: 8px 12px; border: 1px solid #d6ded7; border-radius: 16px; background: #f1f5ef; }
+.talk-current-tutor > div { min-width: 0; }
+.talk-current-tutor p { font-size: .85rem; color: #525b56; margin: 6px 0 0; overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  .talk-tutor-options { gap: 8px; }
+  .talk-current-tutor { gap: 10px; }
+  .talk-current-tutor .talk-portrait { width: 96px; height: 96px; }
+}

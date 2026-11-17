@@ -1,12 +1,13 @@
 import { A } from '@solidjs/router';
 import { createMutation } from '@tanstack/solid-query';
-import { Show, onCleanup } from 'solid-js';
+import { For, Show, onCleanup } from 'solid-js';
 import type { TalkClient } from '../../../domain/talk/types.ts';
-import { createTalkController, canSend, isBusy, atLimit, TALK_LIMITS } from '../../../app/talk/session-store.ts';
+import { createTalkController, canSend, isBusy, atLimit, activeTutorMood, TALK_LIMITS } from '../../../app/talk/session-store.ts';
 import type { TalkStore } from '../../state/talk-store.ts';
 import { useStore } from '../../state/solid-store.ts';
 import { phaseLabel, draftHint } from '../../components/talk/phase-label.ts';
 import { TranscriptLog } from './TranscriptLog.tsx';
+import { TutorPortrait } from './TutorPortrait.tsx';
 import { ReportPanel } from './ReportPanel.tsx';
 import './Talk.css';
 
@@ -37,8 +38,26 @@ export function TalkWidget(props: { client: TalkClient; store: TalkStore }) {
         <h2>오늘 있었던 일부터 시작할까요?</h2>
         <p>쉬운 일본어로 짧게 답하면 튜터가 대화를 이어가요. 필요한 교정과 자연스러운 표현은 대화 옆에 보여드릴게요.</p>
         <p class="talk-example" lang="ja">「今日は散歩しました。」</p>
+        <fieldset class="talk-tutor-choice" disabled={busy()}>
+          <legend>함께 연습할 튜터를 골라주세요</legend>
+          <div class="talk-tutor-options">
+            <For each={['f', 'm'] as const}>{tutor => <button type="button" class="talk-tutor-option"
+              aria-pressed={view().selectedTutor === tutor} onClick={() => controller.selectTutor(tutor)}>
+              <TutorPortrait tutor={tutor} mood="neutral" decorative />
+              <strong>{tutor === 'f' ? '여성 튜터' : '남성 튜터'}</strong>
+              <span>{view().selectedTutor === tutor ? '선택됨' : '선택하기'}</span>
+            </button>}</For>
+          </div>
+        </fieldset>
         <button type="button" class="talk-button talk-primary" disabled={busy()} onClick={() => start.mutate()}>연습 시작</button>
         <p class="talk-note">대화는 이 브라우저에 저장돼요. 새로고침해도 이어갈 수 있어요.</p>
+      </section>
+    </Show>
+    <Show when={view().session || busy()}>
+      <section class="talk-current-tutor" aria-label="현재 튜터">
+        <TutorPortrait tutor={view().session?.tutor ?? view().selectedTutor} mood={activeTutorMood(view())} />
+        <div><strong>{(view().session?.tutor ?? view().selectedTutor) === 'f' ? '여성 튜터' : '남성 튜터'}</strong>
+          <p>{busy() ? '잠시만요, 생각하고 있어요.' : '당신의 이야기를 듣고 있어요.'}</p></div>
       </section>
     </Show>
     <Show when={view().session}>{session => <>

@@ -72,9 +72,10 @@ src/ui/components/talk/     transcript-view.ts(순수) · phase-label.ts(순수)
 
 ### 4.1 domain 타입(`src/domain/talk/types.ts`)
 ```ts
-export interface TutorReply { reply: string; correction: string | null; betterExpression: string | null }
+export type TutorMood = 'neutral' | 'smile' | 'think' | 'surprised' | 'encourage' | 'confused';
+export interface TutorReply { reply: string; correction: string | null; betterExpression: string | null; mood: TutorMood }
 export interface TalkTurn { learner: string; tutor: TutorReply }   // 인사 턴은 learner '' 
-export interface TalkSession { version: 1; turns: TalkTurn[] }      // ≤ 40턴, 클라이언트 보관
+export interface TalkSession { version: 1; tutor: 'f' | 'm'; turns: TalkTurn[] } // ≤ 40턴, 클라이언트 보관
 export interface AudioClip { bytes: Uint8Array; mimeType: 'audio/wav' }
 export type TalkPhase = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking' | 'reporting' | 'ended';
 
@@ -90,7 +91,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 | 경로 | 요청 | 제한 | 성공 | 실패 |
 |---|---|---|---|---|
 | `/api/talk/transcribe` | `multipart/form-data`, 필드 `audio`(파일) | bodyLimit 2_500_000, MIME 허용 목록, 빈 파일 400 | `200 { text: string }`(인식 결과 없음이면 `""`) | 400 · 413 · 415(미지원 형식) · 502 |
-| `/api/talk/turn` | `{ session: TalkSession, text?: string }` | bodyLimit 64_000, `isTalkSession`, text 1~500자, 턴 ≤ 40 | `200 { reply, correction, betterExpression }` | 400 · 413 · 502 |
+| `/api/talk/turn` | `{ session: TalkSession, text?: string }` | bodyLimit 64_000, `normalizeSession`, text 1~500자, 턴 ≤ 40 | `200 { reply, correction, betterExpression, mood }` | 400 · 413 · 502 |
 | `/api/talk/speech` | `{ text: string }` | bodyLimit 4_000, 1~600자 | `200 audio/wav`(PCM16 24 kHz 모노), `Cache-Control: no-store`. 캐시 히트면 저장된 WAV를 그대로 반환 | 400 · 413 · 502(problem+json) |
 | `/api/talk/report` | `{ session: TalkSession }` | bodyLimit 64_000, 턴 ≥ 1 | `200 { report: string }` | 400 · 413 · 502 |
 
@@ -141,6 +142,8 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 
 ## 7. UI와 상태
 
+- 1단계 튜터 선택: 시작 전 여성/남성 초상 카드 버튼(`aria-pressed`)으로 선택하고 `session.tutor`에 저장한다. 세션 진행 중에는 바꾸지 않으며 새 연습에서 다시 선택한다. 기존 v1 기록에 tutor/mood가 없으면 각각 `f`/`neutral`로 복원한다. 명시적으로 잘못된 세션 enum은 서버에서 거부하고 모델의 누락/잘못된 mood는 `neutral`로 보정한다.
+- 현재 표정은 마지막 응답 mood, 요청 대기 중에는 `think`. `public/talk/tutor-<f|m>-<mood>.png`를 `image-rendering: pixelated`로 확대한다. 인사와 파싱 실패 대체 문구는 `speech-cache.ts`의 `TALK_FIXED_PHRASES.greeting/repeat`와 정확히 일치한다. 성공한 인사 응답은 서버에서 고정 문구로 확정한다.
 - **zustand**(`src/ui/state/talk-store.ts`): `TalkView { session: TalkSession | null; phase: TalkPhase; learnerText: string; lastAudioUrl?: string; report?: string; error: string }`. persist는 `session`만(키 `ai-ps.talk.v1`, 복원은 `restoreSession` = `isTalkSession` 검증). 전이는 `app/talk/session-store.ts`의 순수 함수.
 - **TanStack Query**: `createMutation` 3개. `startTalk`(인사 → speech), `sayTurn(input: Blob | string)`(Blob이면 transcribe → turn → speech, 문자열이면 turn → speech), `finishTalk`(report). `retry: 0`, `networkMode: 'always'`, 공유 `AbortController`로 "중단". 각 단계 전에 `setPhase`로 `transcribing → thinking → speaking`을 올린다(책의 지연 누적을 사용자에게 단계로 보여 주는 것이 체감 완화의 최소 수단).
 - 세션 교체: `turn` 성공 시 `addTurn`으로 클라이언트가 턴을 붙인다. STT가 빈 문자열이면 턴을 만들지 않고 "잘 못 알아들었어요. 다시 말해 주세요."를 표시.

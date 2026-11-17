@@ -24,11 +24,11 @@ describe('Given the text tutor application', () => {
     assert.equal(parseTurnRequest({ session: createSession(), text: '  ' }).ok, false);
     assert.equal(parseTurnRequest({ session: createSession(), extra: 'x' }).ok, false);
     assert.equal(parseReportRequest({ session: createSession() }).ok, false);
-    assert.equal((await tutor.respond({ version: 1, turns: Array.from({ length: 40 }, () => ({ learner: 'Hi', tutor: { reply: 'こんにちは！', correction: null, betterExpression: null } })) }, 'Hello')).ok, false);
+    assert.equal((await tutor.respond({ version: 1, tutor: 'f', turns: Array.from({ length: 40 }, () => ({ learner: 'Hi', tutor: { mood: 'neutral' as const, reply: 'こんにちは！', correction: null, betterExpression: null } })) }, 'Hello')).ok, false);
     assert.equal((await tutor.report(createSession())).ok, false); assert.equal(calls, 0);
   });
   it('When the provider fails, throws or returns an empty report Then exposes no raw details', async () => {
-    const session = { version: 1 as const, turns: [{ learner: 'Hi', tutor: { reply: 'Hello', correction: null, betterExpression: null } }] };
+    const session = { version: 1 as const, tutor: 'f' as const, turns: [{ learner: 'Hi', tutor: { mood: 'neutral' as const, reply: 'Hello', correction: null, betterExpression: null } }] };
     for (const kind of ['error','throw','empty']) {
       const tutor = createTutor({ complete: async () => {
         if (kind === 'throw') throw Error('SECRET_KEY user text');

@@ -5,6 +5,7 @@ const titles: Record<number, string> = {
   404: 'Not Found',
   405: 'Method Not Allowed',
   413: 'Content Too Large',
+  415: 'Unsupported Media Type',
   500: 'Internal Server Error',
   502: 'Bad Gateway',
 };

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { initialState, addTurn, fail, setReport, restoreSession, createTalkController } from '../../../src/app/talk/session-store.ts';
 import type { TalkView } from '../../../src/app/talk/session-store.ts';
 import type { TalkClient, TutorReply } from '../../../src/domain/talk/types.ts';
-const reply: TutorReply = { reply: '元気ですか？', correction: null, betterExpression: null };
+const reply: TutorReply = { mood: 'neutral' as const, reply: '元気ですか？', correction: null, betterExpression: null };
 
 describe('Given a text conversation view', () => {
   it('When a reply completes Then appends once; failure and corrupt restore do not damage saved turns', () => {
@@ -11,8 +11,8 @@ describe('Given a text conversation view', () => {
     assert.equal(view.session?.turns.length, 1); assert.equal(view.phase, 'idle');
     assert.deepEqual(fail(view, 'network').session, view.session);
     assert.equal(setReport(view, '보고서').phase, 'ended');
-    assert.equal(restoreSession({ version: 1, turns: 'bad' }), null);
-    assert.equal(restoreSession({ version: 1, turns: [] }), null);
+    assert.equal(restoreSession({ version: 1, tutor: 'f', turns: 'bad' }), null);
+    assert.equal(restoreSession({ version: 1, tutor: 'f', turns: [] }), null);
     assert.deepEqual(restoreSession(view.session), view.session);
   });
   it('When cancelling a pending reply Then ignores late success and preserves the draft and session', async () => {

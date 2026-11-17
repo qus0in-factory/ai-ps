@@ -2,6 +2,7 @@ import type { CompletionGateway } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { TalkSession, Tutor, Reporter } from '../../domain/talk/types.ts';
 import { normalizeSession, record, only, text, canAddTurn, LIMITS } from '../../domain/talk/session.ts';
+import { TALK_FIXED_PHRASES } from '../../domain/talk/speech-cache.ts';
 import { parseTutorReply } from '../../domain/talk/reply.ts';
 import { buildTutorMessages, buildReportMessages } from '../../domain/talk/prompt.ts';
 
@@ -46,7 +47,9 @@ export function createTutor(model: CompletionGateway): Tutor & Reporter {
       const input = parseTurnRequest({ session, ...(learner === undefined ? {} : { text: learner }) });
       if (!input.ok) return input;
       const result = await request(buildTutorMessages(input.value.session, input.value.text), true, signal);
-      return result.ok ? { ok: true, value: parseTutorReply(result.value.content ?? '') } : result;
+      if (!result.ok) return result;
+      const value = parseTutorReply(result.value.content ?? '');
+      return { ok: true, value: input.value.text === undefined ? { ...value, reply: TALK_FIXED_PHRASES.greeting, correction: null, betterExpression: null } : value };
     },
     async report(session, signal) {
       const input = parseReportRequest({ session });

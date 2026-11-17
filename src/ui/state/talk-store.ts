@@ -9,6 +9,9 @@ export function createTalkStore(key = 'ai-ps.talk.v1', storage?: StateStorage): 
     name: key, version: 1,
     storage: createJSONStorage(() => storage ?? localStorage),
     partialize: view => ({ session: view.session }),
-    merge: (persisted, current) => ({ ...current, session: restoreSession((persisted as { session?: unknown } | undefined)?.session) }),
+    merge: (persisted, current) => {
+      const session = restoreSession((persisted as { session?: unknown } | undefined)?.session);
+      return { ...current, session, selectedTutor: session?.tutor ?? current.selectedTutor };
+    },
   }));
 }

@@ -7,12 +7,14 @@ import { createProblem } from '../../app/problem.ts';
 import type { QueensGenerator } from '../../domain/queens/generation.ts';
 import type { Tutor, Reporter } from '../../domain/talk/types.ts';
 import { parseTurnRequest, parseReportRequest } from '../../app/talk/tutor.ts';
+import type { Transcriber } from '../../domain/talk/transcription.ts';
+import { validateTranscriptionAudio } from '../../app/talk/transcribe.ts';
 
 export interface ApiDependencies {
   reply: Reply;
   queens: QueensGenerator;
   adventure: GameMaster;
-  talk?: { tutor: Tutor & Reporter };
+  talk?: { tutor: Tutor & Reporter; transcriber?: Transcriber };
 }
 
 type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; status: number; detail: string };
@@ -142,6 +144,25 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
     });
   });
   postOnly('/api/adventure/turn');
+
+  api.post('/api/talk/transcribe', limit(2_500_000, '음성 요청이 너무 큽니다.'), async c => {
+    let form: FormData;
+    try {
+      if (!c.req.header('Content-Type')?.toLowerCase().startsWith('multipart/form-data;')) {
+        return problem(400, '멀티파트 음성 파일이 필요합니다.', c.req.path);
+      }
+      form = await c.req.raw.formData();
+    } catch { return problem(400, '올바른 멀티파트 요청이 필요합니다.', c.req.path); }
+    const entries = [...form.entries()];
+    if (entries.length !== 1 || entries[0]![0] !== 'audio') return problem(400, 'audio 파일 하나만 필요합니다.', c.req.path);
+    const input = validateTranscriptionAudio(entries[0]![1]);
+    if (!input.ok) return problem(input.status, input.reason, c.req.path);
+    if (!talk?.transcriber) return problem(502, '음성 인식 서비스를 사용할 수 없습니다.', c.req.path);
+    const result = await talk.transcriber.transcribe(input.value, c.req.raw.signal);
+    return result.ok ? c.json({ text: result.value }, 200, { 'Cache-Control': 'no-store' })
+      : problem(502, '음성을 인식하지 못했습니다. 잠시 후 다시 시도해주세요.', c.req.path);
+  });
+  postOnly('/api/talk/transcribe');
 
   api.post('/api/talk/turn', limit(64_000, '대화 기록이 너무 큽니다.'), async c => {
     const body = await readJson(c.req.raw);

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHttpTalk } from '../../src/infra/http-talk.ts';
 import { createSession } from '../../src/domain/talk/session.ts';
-const reply = { reply: 'こんにちは！', correction: null, betterExpression: null };
+const reply = { mood: 'neutral' as const, reply: 'こんにちは！', correction: null, betterExpression: null };
 describe('Given the text Talk HTTP client', () => {
   it('When sending turns and reports Then uses BFF JSON only and validates responses', async () => {
     const paths: string[] = [];
@@ -12,9 +12,9 @@ describe('Given the text Talk HTTP client', () => {
       return Response.json(String(path).endsWith('report') ? { report: '잘했어요.' } : reply);
     });
     assert.deepEqual(await client.respond(createSession()), { ok: true, value: reply });
-    assert.deepEqual(await client.report({ version: 1, turns: [{ learner: '', tutor: reply }] }), { ok: true, value: '잘했어요.' });
+    assert.deepEqual(await client.report({ version: 1, tutor: 'f', turns: [{ learner: '', tutor: reply }] }), { ok: true, value: '잘했어요.' });
     assert.deepEqual(paths, ['/api/talk/turn','/api/talk/report']);
-    for (const body of [{ reply: '' }, { ...reply, correction: {} }, { ...reply, unexpected: 'secret' }]) {
+    for (const body of [{ mood: 'neutral' as const, reply: '' }, { ...reply, correction: {} }, { ...reply, unexpected: 'secret' }]) {
       assert.equal((await createHttpTalk(async () => Response.json(body)).respond(createSession())).ok, false);
     }
   });
