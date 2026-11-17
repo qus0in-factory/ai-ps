@@ -48,7 +48,7 @@ export function QueensGeneratorWidget(props: { controller: QueensGenerationContr
             onCell={(row, column) => play()?.cycle(row, column)} />
           <div class="queens-playbar">
             <span class="queens-moves">이동 {board()?.moves ?? 0}회</span>
-            <Show when={board()?.solved && !board()?.revealed}><strong class="queens-solved" role="status">완성!</strong></Show>
+            <Show when={board()?.solved && !board()?.revealed}><strong class="queens-solved" role="status">정답입니다</strong></Show>
             <Show when={board()?.revealed}><span class="queens-revealed">정답 공개</span></Show>
             <button type="button" onClick={() => play()?.reset()}>다시 하기</button>
             <button type="button" onClick={() => play()?.reveal()} disabled={Boolean(board()?.revealed)}>정답 보기</button>
