@@ -37,7 +37,7 @@ function parseProposal(content: string, size: number): RegionId[][] | undefined 
     const data = JSON.parse(content);
     const raw = data.rows ?? data.regions;
     const regions = Array.isArray(raw) && raw.every(row => typeof row === 'string')
-      ? raw.map(row => row.replace(/\s/g, '').split('').map(char => /^[0-8]$/.test(char) && Number(char) < size ? Number(char) : NaN))
+      ? raw.map(row => row.replace(/\s/g, '').split('').map(char => /^[0-8]$/.test(char) && Number(char) < size ? Number(char) : NaN)) // size <= 9 가정: region ID는 0..8 범위, 최종 검증은 Number(char) < size
       : raw;
     const grid = validateGrid({ size, regions });
     if (grid.valid || !grid.issues.some(issue => issue.code === 'INVALID_GRID')) return regions as RegionId[][];
@@ -54,7 +54,7 @@ async function propose(model: CompletionGateway, messages: ChatMessage[], signal
   try {
     if (signal.aborted) { cancel(); return await aborted; }
     return await Promise.race([model.complete(messages, {
-      response_format: { type: 'json_object' }, timeoutMs: MODEL_TIMEOUT_MS, signal,
+      response_format: { type: 'json_object' }, signal,
     }), aborted]);
   } catch { return { ok: false as const, reason: '모델 요청 실패' }; }
   finally { signal.removeEventListener('abort', cancel); }
@@ -73,7 +73,7 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
       const expiresAt = now() + GENERATION_TIMEOUT_MS;
       const emit: GenerationListener = event => { options.log?.(event); onEvent?.(event); };
       const stop = (reason: string) => {
-        emit({ kind: 'stopped', attempt: 1, reason });
+        emit({ kind: 'stopped', reason });
         return { ok: false as const, reason };
       };
       const interrupted = () => {
@@ -82,14 +82,14 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
       };
       const solution = place(size);
       const complete = (regions: RegionId[][], message: string, path: GenerationPath, reason?: string) => {
-        emit({ kind: 'model', attempt: 1, path, ...(reason ? { reason } : {}) });
-        emit({ kind: 'repair', attempt: 1, message });
+        emit({ kind: 'model', path, ...(reason ? { reason } : {}) });
+        emit({ kind: 'repair', message });
         const halted = interrupted();
         if (halted) return halted;
-        emit({ kind: 'complete', attempt: 1 });
-        return { ok: true as const, value: { puzzle: { size, regions }, solution, attempts: 1 } };
+        emit({ kind: 'complete' });
+        return { ok: true as const, value: { puzzle: { size, regions }, solution } };
       };
-      emit({ kind: 'placement', attempt: 1 });
+      emit({ kind: 'placement' });
       let halted = interrupted();
       if (halted) return halted;
 
@@ -149,8 +149,8 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
         if (seed) {
           if (solverCalls > 0) reason = '모델 시드 탐색 한도 소진';
         } else {
-          emit({ kind: 'model', attempt: 1, path: 'algorithm', reason });
-          emit({ kind: 'repair', attempt: 1, message: `코드 보정 중단 · 재시작 ${restarts}회 · solver 예산 ${solverCalls}/${maxSolverCalls}회` });
+          emit({ kind: 'model', path: 'algorithm', reason });
+          emit({ kind: 'repair', message: `코드 보정 중단 · 재시작 ${restarts}회 · solver 예산 ${solverCalls}/${maxSolverCalls}회` });
         }
       }
       return interrupted() ?? stop('알고리즘 대체 경로의 작업 한도(재시작 500회/solver 4000회)에 도달했지만 유일한 정답을 가진 퍼즐을 만들지 못했습니다.');

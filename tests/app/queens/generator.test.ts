@@ -47,7 +47,7 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     } }, { place }).generate(5, event => events.push(event));
     assert.equal(result.ok, true);
     assert.equal(calls, 1);
-    assert.equal(captured?.options?.timeoutMs, 20_000);
+    assert.ok(captured?.options?.signal instanceof AbortSignal);
     assert.deepEqual(captured?.options?.response_format, { type: 'json_object' });
     assert.ok(captured!.messages[0]!.content.length < 600);
     assert.doesNotMatch(captured!.messages[0]!.content, /unique|only solution|mentally/i);
@@ -57,7 +57,7 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     assert.ok(events.every(isGenerationEvent));
     assert.doesNotMatch(JSON.stringify(events), /"row"|"column"|"solution"|"regions"/);
     if (result.ok) {
-      assert.equal(result.value.attempts, 1);
+    
       assert.deepEqual(result.value.solution, solution);
       assert.equal(validateDesign(result.value.puzzle, solution).valid, true);
     }
@@ -142,9 +142,9 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     assert.equal((await generator.generate(5, undefined, controller.signal)).ok, false);
   });
   it('When progress crosses the HTTP boundary Then accepts summaries and rejects retired retry events', () => {
-    assert.equal(isGenerationEvent({ kind: 'model', attempt: 1, path: 'algorithm', reason: '형식 오류' }), true);
-    assert.equal(isGenerationEvent({ kind: 'model', attempt: 1, path: 'unknown' }), false);
-    assert.equal(isGenerationEvent({ kind: 'model', attempt: 1, path: ['model'] }), false);
-    for (const kind of ['attempt', 'feedback', 'candidate', 'validation']) assert.equal(isGenerationEvent({ kind, attempt: 1, retry: 0, message: 'old', regions: null }), false);
+    assert.equal(isGenerationEvent({ kind: 'model', path: 'algorithm', reason: '형식 오류' }), true);
+    assert.equal(isGenerationEvent({ kind: 'model', path: 'unknown' }), false);
+    assert.equal(isGenerationEvent({ kind: 'model', path: ['model'] }), false);
+    for (const kind of ['attempt', 'feedback', 'candidate', 'validation']) assert.equal(isGenerationEvent({ kind, retry: 0, message: 'old', regions: null }), false);
   });
 });

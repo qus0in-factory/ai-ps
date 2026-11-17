@@ -27,8 +27,7 @@ export function createHttpQueensGenerator(fetcher: typeof fetch = fetch): Queens
           } else if (value.type === 'result' && 'value' in value) {
             const generated = value.value as GeneratedPuzzle;
             const grid = validateGrid(generated?.puzzle);
-            if (grid.valid && grid.puzzle.size === size && validatePlacement(grid.puzzle, generated.solution).valid &&
-                Number.isInteger(generated.attempts) && generated.attempts >= 1 && generated.attempts <= 11) return { ok: true, value: generated };
+            if (grid.valid && grid.puzzle.size === size && validatePlacement(grid.puzzle, generated.solution).valid) return { ok: true, value: generated };
             throw new Error('Invalid puzzle');
           } else throw new Error('Invalid frame');
         }

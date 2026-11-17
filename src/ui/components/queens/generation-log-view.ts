@@ -1,5 +1,6 @@
 import type { GenerationEvent } from '../../../domain/queens/generation.ts';
 
+// 현재 메시지는 코드가 만든 고정 문구·횟수뿐이므로 좌표는 나오지 않음; 회귀 방어용.
 function safeLine(text: string): string {
   return text.replace(/\{\s*"row"\s*:\s*-?\d+\s*,\s*"column"\s*:\s*-?\d+\s*\}/g, '(가려짐)')
     .replace(/\(\s*-?\d+\s*,\s*-?\d+\s*\)/g, '(가려짐)')

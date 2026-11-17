@@ -15,7 +15,7 @@ function capture(level?: string) {
 describe('Given a Workers console logger', () => {
   it('When Queens logs summaries Then excludes queen coordinates even from an obsolete payload', () => {
     const { logger, entries } = capture();
-    createQueensLogger(logger)({ kind: 'placement', attempt: 1, solution: [{ row: 0, column: 2 }] } as never);
+    createQueensLogger(logger)({ kind: 'placement', solution: [{ row: 0, column: 2 }] } as never);
     assert.doesNotMatch(JSON.stringify(entries), /"solution"|"row"|"column"/);
   });
   it('When tool and generation events arrive Then preserves structured fields and severity', () => {
@@ -25,8 +25,8 @@ describe('Given a Workers console logger', () => {
     tools({ event: 'model_request', turn: 1 });
     tools({ event: 'tool_result', turn: 1, name: 'weather', result: { ok: false, reason: 'offline' } });
     tools({ event: 'model_error', turn: 2, reason: 'timeout' });
-    queens({ kind: 'complete', attempt: 1 });
-    queens({ kind: 'stopped', attempt: 2, reason: 'cancelled' });
+    queens({ kind: 'complete' });
+    queens({ kind: 'stopped', reason: 'cancelled' });
     assert.deepEqual(entries.map(entry => entry.method), ['info', 'warn', 'error', 'info', 'warn']);
     const values = entries.map(entry => entry.value as Record<string, unknown>);
     assert.equal(values[0]!.event, 'model_request');
@@ -48,7 +48,7 @@ describe('Given a Workers console logger', () => {
     log({ event: 'model_error', turn: 1, reason: 'offline' });
     assert.deepEqual(entries.map(entry => entry.method), ['warn', 'error']);
     const muted = capture('silent');
-    createQueensLogger(muted.logger)({ kind: 'stopped', attempt: 1, reason: 'cancelled' });
+    createQueensLogger(muted.logger)({ kind: 'stopped', reason: 'cancelled' });
     assert.equal(muted.entries.length, 0);
   });
 

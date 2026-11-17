@@ -29,7 +29,7 @@ export interface PuzzleValidation extends QueensValidation {
   solutions: QueensSolution[];
   nodesVisited: number;
 }
-export interface GeneratedPuzzle { puzzle: QueensPuzzle; solution: QueensSolution; attempts: number }
+export interface GeneratedPuzzle { puzzle: QueensPuzzle; solution: QueensSolution }
 export interface QueensOperations {
   validatePuzzle(input: unknown): PuzzleValidation;
   validatePlacement(input: unknown, queens: unknown): QueensValidation;

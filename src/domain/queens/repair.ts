@@ -104,10 +104,6 @@ function takeableCells(grid: Grid, target: RegionId, queens: Set<number>): Cell[
     });
 }
 
-function moveCell(grid: Grid, cell: Cell, target: RegionId): boolean {
-  grid[cell.row]![cell.column] = target;
-  return true;
-}
 
 /**
  * 끊어진 영역 조각을 퀸이 있는 연결 성분만 남기고 이웃 영역으로 넘긴다.
@@ -147,7 +143,7 @@ export function repairDisconnected(regions: Grid, solution: QueensSolution): Gri
       if (!options.length) continue;
       const target = options.reduce((best, region) =>
         ((sizes.get(region) ?? 0) < (sizes.get(best) ?? 0) ? region : best), options[0]!);
-      moveCell(grid, cell, target);
+      grid[cell.row]![cell.column] = target;
       sizes.set(target, (sizes.get(target) ?? 0) + 1);
       assigned.add(cellKey(size, cell));
     }
@@ -167,7 +163,7 @@ export function growSmallRegions(regions: Grid, solution: QueensSolution): Grid 
   const small = twoCellRegions(grid);
   for (const region of small.slice(1)) {
     const [cell] = takeableCells(grid, region, queens);
-    if (cell) moveCell(grid, cell, region);
+    if (cell) grid[cell.row]![cell.column] = region;
   }
   return grid;
 }
@@ -207,10 +203,11 @@ export function breakAlternatives(
     let moved = false;
     for (const queen of movable) {
       const from = grid[queen.row]![queen.column]!;
+      const regionCounts = counts(grid);
       const options = neighbours(size, queen.row, queen.column)
         .map((next) => grid[next.row]![next.column]!)
         .filter((region) => region !== from)
-        .sort((a, b) => (counts(grid).get(b) ?? 0) - (counts(grid).get(a) ?? 0));
+        .sort((a, b) => (regionCounts.get(b) ?? 0) - (regionCounts.get(a) ?? 0));
       for (const to of options) {
         const candidate = copyGrid(grid);
         candidate[queen.row]![queen.column] = to;
@@ -301,7 +298,7 @@ function ensureMinSize(grid: Grid, queens: Set<number>): Grid {
   for (const region of regionIds(out)) {
     if ((counts(out).get(region) ?? 0) >= 2) continue;
     const [cell] = takeableCells(out, region, queens);
-    if (cell) moveCell(out, cell, region);
+    if (cell) out[cell.row]![cell.column] = region;
   }
   return out;
 }

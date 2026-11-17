@@ -6,7 +6,7 @@ describe('Given the Queens generation UI controller', () => {
   it('When generating Then exposes each event and clears pending on failure', async () => {
     const controller = createGenerationController({ generate: async (size, onEvent) => {
       assert.equal(size, 7);
-      onEvent?.({ kind: 'placement', attempt: 1 });
+      onEvent?.({ kind: 'placement' });
       assert.equal(controller.getState().pending, true);
       assert.equal(controller.getState().events.length, 1);
       return { ok: false, reason: '알고리즘 작업 한도' };

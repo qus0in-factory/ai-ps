@@ -32,8 +32,8 @@ export function QueensGeneratorWidget(props: { controller: QueensGenerationContr
   return (
     <main class="queens-page">
       <header><A href="/">← 홈</A><h1>Queens</h1></header>
-      <p>코드가 무작위로 퀸 정답 배치를 만들고, AI가 그 배치가 유일한 정답이 되도록 색상 영역을 디자인합니다. 알고리즘이 영역 연결성과 정답의 유일성을 검증합니다.</p>
-      <p class="queens-note">검증에 실패하면 피드백을 전달해 최대 10회 재시도합니다. 생성에 실패할 수 있습니다.</p>
+      <p>모델이 영역 모양을 제안하고 코드가 유일한 정답으로 다듬습니다.</p>
+      <p class="queens-note">모델 응답이 없거나 어긋나도 코드가 퍼즐을 완성합니다.</p>
       <form onSubmit={(event) => { event.preventDefault(); void props.controller.generate(); }}>
         <label>격자 크기 <Select label="격자 크기" value={state().size} options={sizes} disabled={state().pending}
           onChange={(value) => props.controller.setSize(Number(value))} /></label>
@@ -43,7 +43,7 @@ export function QueensGeneratorWidget(props: { controller: QueensGenerationContr
       <Show when={!state().pending && state().generated}>{(puzzle) => (
         <section class="queens-play" aria-label="퍼즐 플레이">
           <h2>플레이</h2>
-          <p>{puzzle().attempts}회 시도 만에 유일한 정답이 있는 퍼즐을 만들었습니다.</p>
+          <p>유일한 정답이 있는 퍼즐을 만들었습니다.</p>
           <p class="queens-guide">칸을 누르면 X → 퀸 → 빈칸 순서로 바뀝니다.</p>
           <QueensBoard puzzle={puzzle().puzzle} marks={board()?.marks} conflicts={board()?.conflicts}
             disabled={Boolean(board()?.solved)}

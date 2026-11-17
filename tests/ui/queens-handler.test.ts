@@ -25,7 +25,7 @@ describe('Given the Queens generation endpoint', () => {
   it('When work bounds are exhausted Then streams progress and a terminal Problem Details frame', async () => {
     const result = await request('{"size":5}', { generate: async (size, onEvent, signal) => {
       assert.equal(size, 5); assert.ok(signal instanceof AbortSignal);
-      onEvent?.({ kind: 'placement', attempt: 1 });
+      onEvent?.({ kind: 'placement' });
       return { ok: false, reason: '알고리즘 작업 한도에 도달했습니다.' };
     } });
     const frames = result.payload.trim().split('\n').map(line => JSON.parse(line));
