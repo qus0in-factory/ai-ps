@@ -13,6 +13,11 @@ describe('Given a bounded backtracking Queens solver', () => {
     assert.equal(result.status, 'unique');
     assert.deepEqual(result.solutions, [[1,3,0,2].map((column, row) => ({ row, column }))]);
   });
+  it('When the second answer is found Then stops before searching the rest', () => {
+    const result = solveQueens(multiple);
+    assert.equal(result.solutions.length, 2);
+    assert.ok(result.nodesVisited < 100, `조기 종료 후 탐색량: ${result.nodesVisited}`);
+  });
   it('When no solution exists Then reports none', () => {
     assert.equal(solveQueens(none).status, 'none');
     assert.deepEqual(solveQueens(none).solutions, []);

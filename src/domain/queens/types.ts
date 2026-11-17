@@ -5,11 +5,13 @@ export interface QueenPosition { row: number; column: number }
 export type QueensSolution = QueenPosition[];
 export type QueensIssueCode = 'INVALID_GRID' | 'REGION_COUNT' | 'DISCONNECTED_REGION' |
   'QUEEN_COUNT' | 'INVALID_POSITION' | 'DUPLICATE_CELL' | 'ROW_CONFLICT' | 'COLUMN_CONFLICT' |
-  'REGION_CONFLICT' | 'REGION_TOO_SMALL' | 'ADJACENT_QUEENS' | 'NO_SOLUTION' | 'MULTIPLE_SOLUTIONS' | 'SEARCH_LIMIT';
+  'REGION_CONFLICT' | 'REGION_TOO_SMALL' | 'TOO_MANY_SMALL_REGIONS' | 'ADJACENT_QUEENS' | 'NO_SOLUTION' | 'MULTIPLE_SOLUTIONS' | 'SEARCH_LIMIT';
 export interface QueensIssue {
   code: QueensIssueCode;
   message: string;
   region?: RegionId;
+  /** 여러 영역이 함께 위반일 때(예: 2칸 영역이 2개 이상). */
+  regions?: RegionId[];
   solutions?: QueensSolution[];
 }
 export interface QueensValidation { valid: boolean; issues: QueensIssue[] }

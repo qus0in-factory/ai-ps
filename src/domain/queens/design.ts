@@ -25,12 +25,32 @@ function regionsUnderTwoCells(regions: RegionId[][]): QueensIssue[] {
   return issues;
 }
 
+function smallRegionCounts(regions: RegionId[][]): Map<RegionId, number> {
+  const counts = new Map<RegionId, number>();
+  for (const row of regions) for (const region of row) counts.set(region, (counts.get(region) ?? 0) + 1);
+  return counts;
+}
+
+/** 2칸 영역은 퍼즐당 최대 1개. 위반이면 영역 목록을 담은 이슈 하나를 돌려준다. */
+function tooManySmallRegions(regions: RegionId[][]): QueensIssue | undefined {
+  const small = [...smallRegionCounts(regions)].filter(([, count]) => count === 2).map(([region]) => region);
+  if (small.length <= 1) return undefined;
+  return {
+    code: 'TOO_MANY_SMALL_REGIONS',
+    regions: small,
+    message: `2칸 색상 영역은 퍼즐당 1개까지만 허용됩니다. 현재 ${small.length}개: ${small.map((region) => JSON.stringify(region)).join(', ')}`,
+  };
+}
+
 export function validateDesign(input: unknown, solution: QueensSolution): PuzzleValidation {
   const grid = validateGrid(input);
   if (!grid.valid) return { ...grid, solutionStatus: 'invalid', solutions: [], nodesVisited: 0 };
 
   const smallRegions = regionsUnderTwoCells(grid.puzzle.regions);
   if (smallRegions.length) return unfinished(smallRegions);
+
+  const crowded = tooManySmallRegions(grid.puzzle.regions);
+  if (crowded) return unfinished([crowded]);
 
   const placement = validatePlacement(grid.puzzle, solution);
   if (!placement.valid) return unfinished(placement.issues);

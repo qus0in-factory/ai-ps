@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  candidateView, feedbackView, HIDDEN_VALUE, redactCoordinates, validationView,
+  candidateView, feedbackView, HIDDEN_VALUE, redactCoordinates, repairView, validationView,
 } from '../../../../src/ui/components/queens/generation-log-view.ts';
 import type { PuzzleValidation } from '../../../../src/domain/queens/types.ts';
 
@@ -11,6 +11,16 @@ const twoAnswers = [
   [{ row: 0, column: 1 }, { row: 1, column: 3 }],
   [{ row: 0, column: 3 }, { row: 1, column: 1 }],
 ];
+
+describe('Given a code repair progress summary', () => {
+  it('When shown Then displays the path as one line while hiding any coordinates', () => {
+    assert.equal(repairView('알고리즘 대체 경로 · 재시작 3회'), '알고리즘 대체 경로 · 재시작 3회');
+    const text = repairView('영역 연결 (0, 1) {"row":2,"column":3}\n완료');
+    assert.doesNotMatch(text, coordinates);
+    assert.doesNotMatch(text, /\n/);
+    assert.ok(text.includes(HIDDEN_VALUE));
+  });
+});
 
 describe('Given a validation report that found several answers', () => {
   it('When the log entry is prepared Then masks every solution and the quoted coordinates while keeping the failure reason', () => {

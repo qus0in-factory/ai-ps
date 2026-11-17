@@ -7,6 +7,29 @@ function environment(): Env {
 }
 
 describe('Given the Workers composition root', () => {
+  it('When Queens, chat and adventure call the model Then enables high reasoning only for Queens design', async t => {
+    const requests: Record<string, unknown>[] = [];
+    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)));
+      return Response.json({ choices: [] });
+    });
+    const env = { ...environment(), OPENAI_MODEL: 'test-model', OPENAI_API_KEY: 'test-key', OPENAI_TOOL_MODE: 'json' };
+    for (const [path, body] of [
+      ['/api/queens/generate', { size: 5 }],
+      ['/api/chat', { messages: [{ role: 'user', content: '안녕' }] }],
+      ['/api/adventure/start', {}],
+    ] as const) {
+      const response = await worker.fetch(new Request(`https://ai-ps.test${path}`, { method: 'POST', body: JSON.stringify(body) }), env);
+      await response.text();
+    }
+    assert.equal(requests.length, 4);
+    assert.deepEqual(requests.map(body => body.reasoning_effort), ['high', 'high', undefined, undefined]);
+    assert.ok(requests.every(body => body.model === 'test-model'));
+    assert.deepEqual(requests[0]!.response_format, { type: 'json_object' });
+    assert.equal('temperature' in requests[0]!, false);
+    assert.equal('tools' in requests[0]!, false);
+  });
+
   it('When a SPA route is requested Then delegates the original request to the assets binding', async () => {
     const request = new Request('https://ai-ps.test/queens?size=5');
     let received: Request | undefined;

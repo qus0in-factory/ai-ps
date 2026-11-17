@@ -7,6 +7,7 @@ const messages = {
   candidate: 'Queens 영역 디자인 제안',
   validation: 'Queens 검증 결과',
   feedback: 'Queens 재시도 피드백',
+  repair: 'Queens 코드 보정',
   complete: 'Queens 생성 완료',
   stopped: 'Queens 생성 중단',
 };

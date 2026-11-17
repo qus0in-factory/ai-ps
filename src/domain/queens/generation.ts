@@ -1,13 +1,14 @@
 import type { Result } from '../chat.ts';
 import type { GeneratedPuzzle, PuzzleValidation, QueensSolution } from './types.ts';
 
-export const MAX_QUEENS_RETRIES = 10;
+export const MAX_QUEENS_RETRIES = 1;
 export type GenerationEvent =
   | { kind: 'placement'; attempt: number; solution: QueensSolution }
   | { kind: 'attempt'; attempt: number; retry: number }
   | { kind: 'candidate'; attempt: number; regions: unknown }
   | { kind: 'validation'; attempt: number; report: PuzzleValidation }
   | { kind: 'feedback'; attempt: number; message: string }
+  | { kind: 'repair'; attempt: number; message: string }
   | { kind: 'complete'; attempt: number }
   | { kind: 'stopped'; attempt: number; reason: string };
 export type GenerationListener = (event: GenerationEvent) => void;
@@ -37,7 +38,7 @@ export function isGenerationEvent(value: unknown): value is GenerationEvent {
   if (value.kind === 'placement') return 'solution' in value && Array.isArray(value.solution);
   if (value.kind === 'candidate') return 'regions' in value;
   if (value.kind === 'validation') return 'report' in value && isPuzzleValidation(value.report);
-  if (value.kind === 'feedback') return 'message' in value && typeof value.message === 'string';
+  if (value.kind === 'feedback' || value.kind === 'repair') return 'message' in value && typeof value.message === 'string';
   if (value.kind === 'stopped') return 'reason' in value && typeof value.reason === 'string';
   return value.kind === 'complete';
 }

@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import { placementView } from '../../components/queens/placement-view.ts';
 import {
-  candidateView, feedbackView, SPOILER_SUMMARY, validationView,
+  candidateView, feedbackView, repairView, SPOILER_SUMMARY, validationView,
 } from '../../components/queens/generation-log-view.ts';
 import type { GenerationEvent } from '../../../domain/queens/generation.ts';
 
@@ -32,7 +32,8 @@ export function GenerationLog(props: { events: GenerationEvent[] }) {
         <h2>진행 기록</h2>
         <ol><For each={props.events}>{(event) => (
           <li>
-            <Show when={event.kind === 'attempt'}><strong>{event.kind === 'attempt' && `생성 ${event.attempt}회 · 재시도 ${event.retry}/10`}</strong></Show>
+            <Show when={event.kind === 'attempt'}><strong>{event.kind === 'attempt' && `생성 ${event.attempt}회 · 재시도 ${event.retry}/1`}</strong></Show>
+            <Show when={event.kind === 'repair'}><span>{event.kind === 'repair' && repairView(event.message)}</span></Show>
             <Show when={event.kind === 'placement'}>
               {(() => {
                 if (event.kind !== 'placement') return null;

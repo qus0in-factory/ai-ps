@@ -3,17 +3,23 @@ import type { CompletionGateway } from '../../domain/completion.ts';
 import { validateDesign } from '../../domain/queens/design.ts';
 import { MAX_QUEENS_RETRIES, type GenerationListener, type QueensGenerator } from '../../domain/queens/generation.ts';
 import { createRandomSolution } from '../../domain/queens/random-solution.ts';
-import type { PuzzleValidation, QueensPuzzle, QueensSolution, RegionId } from '../../domain/queens/types.ts';
+import { validateGrid } from '../../domain/queens/grid.ts';
+import { breakAlternatives, growRegionsFromSolution, growSmallRegions, repairDisconnected } from '../../domain/queens/repair.ts';
+import type { PuzzleValidation, QueensSolution, RegionId } from '../../domain/queens/types.ts';
 
 interface GeneratorOptions {
   place?: (size: number) => QueensSolution;
   log?: GenerationListener;
   now?: () => number;
+  random?: () => number;
 }
 
 const CALL_TIMEOUT_MS = 180_000;
 // Leave time to deliver the final event before the browser's 300 s deadline.
 const GENERATION_TIMEOUT_MS = 290_000;
+const FALLBACK_RESERVE_MS = 500;
+const MAX_FALLBACK_RESTARTS = 500;
+const MAX_FALLBACK_SOLVER_CALLS = 1000;
 const TIMEOUT_REASON = '퍼즐 생성 제한 시간(290초)을 초과했습니다. 재시도를 중단합니다.';
 
 function invalid(message: string): PuzzleValidation {
@@ -34,6 +40,7 @@ function systemPrompt(size: number): string {
     '- Each region is connected through shared up/down/left/right edges, not only diagonally.',
     '- Each region contains exactly one of the given queens.',
     '- Each region must have at least 2 cells.',
+    '- At most one region may have exactly 2 cells; every other region must have at least 3 cells.',
     '',
     'Queens rules the finished puzzle must follow:',
     '- Exactly one queen in each row, each column and each region.',
@@ -62,7 +69,8 @@ function userPrompt(size: number, solution: QueensSolution): string {
 }
 
 export function createQueensGenerator(model: CompletionGateway, options: GeneratorOptions = {}): QueensGenerator {
-  const place = options.place ?? ((size: number) => createRandomSolution(size, Math.random));
+  const random = options.random ?? Math.random;
+  const place = options.place ?? ((size: number) => createRandomSolution(size, random));
   const now = options.now ?? (() => performance.now());
   return {
     async generate(size, onEvent, signal) {
@@ -77,8 +85,16 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
         emit({ kind: 'stopped', attempt, reason });
         return { ok: false as const, reason };
       };
+      const interrupted = (attempt: number) => {
+        if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
+        if (expired()) return stop(TIMEOUT_REASON, attempt);
+      };
 
       const solution = place(size);
+      const complete = (regions: RegionId[][], attempt: number) => {
+        emit({ kind: 'complete', attempt });
+        return { ok: true as const, value: { puzzle: { size, regions }, solution, attempts: attempt } };
+      };
       emit({ kind: 'placement', attempt: 1, solution });
 
       const messages: ChatMessage[] = [
@@ -92,11 +108,14 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
         emit({ kind: 'attempt', attempt, retry: attempt - 1 });
         const response = await model.complete(messages, {
           response_format: { type: 'json_object' }, signal: requestSignal,
-          timeoutMs: Math.min(CALL_TIMEOUT_MS, remainingMs),
+          timeoutMs: Math.min(CALL_TIMEOUT_MS, Math.max(1, remainingMs - FALLBACK_RESERVE_MS)),
         });
         if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
         if (expired()) return stop(TIMEOUT_REASON, attempt);
-        if (!response.ok) return stop(response.reason, attempt);
+        if (!response.ok) {
+          if (attempt <= MAX_QUEENS_RETRIES) emit({ kind: 'feedback', attempt, message: `모델 응답을 받지 못해 한 번 재시도합니다. ${response.reason}` });
+          continue;
+        }
 
         const content = response.value.content ?? '';
         let regions: unknown = null;
@@ -108,25 +127,77 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
         } catch { parsed = false; }
         emit({ kind: 'candidate', attempt, regions });
 
-        const report = parsed
+        // Only well-shaped grids reach repair; disconnected regions are repairable.
+        const grid = validateGrid({ size, regions });
+        if (grid.valid || grid.issues.every(issue => issue.code === 'DISCONNECTED_REGION')) {
+          const connected = repairDisconnected(regions as RegionId[][], solution);
+          const grown = growSmallRegions(connected, solution);
+          const changes = [];
+          if (JSON.stringify(connected) !== JSON.stringify(regions)) changes.push('끊긴 영역 연결');
+          if (JSON.stringify(grown) !== JSON.stringify(connected)) changes.push('작은 영역 확장');
+          regions = grown;
+          if (changes.length) emit({ kind: 'repair', attempt, message: `코드 보정: ${changes.join(' · ')}` });
+        }
+        let report = parsed
           ? validateDesign({ size, regions: regions as RegionId[][] }, solution)
           : invalid('응답이 {"regions": [...]} 형태의 JSON이 아닙니다. 크기에 맞는 영역 행렬만 출력하세요.');
         emit({ kind: 'validation', attempt, report });
-        if (expired()) return stop(TIMEOUT_REASON, attempt);
+        let halted = interrupted(attempt);
+        if (halted) return halted;
+
+        if (report.solutionStatus === 'multiple') {
+          const broken = breakAlternatives(regions as RegionId[][], solution, { maxSteps: 20 });
+          regions = broken.regions;
+          emit({ kind: 'repair', attempt, message: `코드 보정: 대체 해 제거 · 이동 ${broken.steps}회` });
+          report = validateDesign({ size, regions: broken.regions }, solution);
+          emit({ kind: 'validation', attempt, report });
+        }
+        halted = interrupted(attempt);
+        if (halted) return halted;
 
         if (report.valid && report.solutionStatus === 'unique') {
-          emit({ kind: 'complete', attempt });
-          const puzzle: QueensPuzzle = { size, regions: regions as RegionId[][] };
-          return { ok: true, value: { puzzle, solution: report.solutions[0] ?? solution, attempts: attempt } };
+          return complete(regions as RegionId[][], attempt);
         }
 
-        const feedback = report.issues.map(issue => `${issue.code}: ${issue.message}`).join('\n') ||
-          'UNKNOWN: 검증 결과를 확인하지 못했습니다.';
-        messages.push({ role: 'assistant', content });
-        messages.push({ role: 'user', content: `The region design failed validation. Fix every issue below and return the full ${size}×${size} regions matrix as JSON.\n${feedback}` });
-        emit({ kind: 'feedback', attempt, message: feedback });
+        if (attempt <= MAX_QUEENS_RETRIES) {
+          const feedback = report.issues.map(issue => `${issue.code}: ${issue.message}`).join('\n') ||
+            'UNKNOWN: 검증 결과를 확인하지 못했습니다.';
+          messages.push({ role: 'assistant', content });
+          messages.push({ role: 'user', content: `The region design failed validation. Current regions after code repair: ${JSON.stringify(regions)}. Fix every issue below and return the full ${size}×${size} regions matrix as JSON.\n${feedback}` });
+          emit({ kind: 'feedback', attempt, message: feedback });
+        }
       }
-      return stop(expired() ? TIMEOUT_REASON : `최초 생성과 ${MAX_QUEENS_RETRIES}회 재시도 후에도 유일한 정답을 가진 퍼즐을 만들지 못했습니다.`, MAX_QUEENS_RETRIES + 1);
+
+      const attempt = MAX_QUEENS_RETRIES + 1;
+      emit({ kind: 'repair', attempt, message: '알고리즘 대체 경로: 같은 정답 배치에서 영역을 다시 만듭니다.' });
+      // Workers clocks do not advance during CPU work: bound work, not local elapsed time.
+      let restarts = 0, solverCalls = 0;
+      while (restarts < MAX_FALLBACK_RESTARTS && solverCalls < MAX_FALLBACK_SOLVER_CALLS - 1) {
+        let halted = interrupted(attempt);
+        if (halted) return halted;
+        restarts++;
+        const grown = growRegionsFromSolution(size, solution, random);
+        const broken = breakAlternatives(grown, solution, {
+          maxSteps: 20, maxSolverCalls: MAX_FALLBACK_SOLVER_CALLS - solverCalls - 1,
+        });
+        // Reserve one possible solver invocation for the final full validation.
+        solverCalls += broken.solverCalls + 1;
+        const report = validateDesign({ size, regions: broken.regions }, solution);
+        halted = interrupted(attempt);
+        if (halted) return halted;
+        if (report.valid && report.solutionStatus === 'unique') {
+          emit({ kind: 'repair', attempt, message: `알고리즘 대체 경로 완료 · 재시작 ${restarts}회 · solver 예산 ${solverCalls}/${MAX_FALLBACK_SOLVER_CALLS}회` });
+          emit({ kind: 'candidate', attempt, regions: broken.regions });
+          emit({ kind: 'validation', attempt, report });
+          halted = interrupted(attempt);
+          if (halted) return halted;
+          return complete(broken.regions, attempt);
+        }
+        // Let request cancellation and other requests run between short CPU batches.
+        if (restarts % 2 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+      emit({ kind: 'repair', attempt, message: `알고리즘 대체 경로 종료 · 재시작 ${restarts}회 · solver 예산 ${solverCalls}/${MAX_FALLBACK_SOLVER_CALLS}회` });
+      return interrupted(attempt) ?? stop('알고리즘 대체 경로의 작업 한도(재시작 500회/solver 1000회)에 도달했지만 유일한 정답을 가진 퍼즐을 만들지 못했습니다.', attempt);
     },
   };
 }

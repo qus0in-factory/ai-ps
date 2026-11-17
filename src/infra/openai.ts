@@ -71,7 +71,7 @@ export async function completion(
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean },
+  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; reasoningEffort?: 'medium' | 'high' },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
@@ -90,7 +90,8 @@ export function createOpenAICompletion(
         ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
         ...(functions.length && settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),
         ...(functions.length && settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
-        ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
+        ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const }
+          : config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}),
         ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
       }, {
         debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,

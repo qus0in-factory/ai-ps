@@ -47,6 +47,10 @@ export function feedbackView(message: string): LogEntryView {
   return detail === message ? { detail } : { detail, spoiler: message };
 }
 
+export function repairView(message: string): string {
+  return redactCoordinates(message).replace(/[\r\n]+/g, ' ');
+}
+
 export function candidateView(regions: unknown): LogEntryView {
   const raw = JSON.stringify(regions, null, 2) ?? 'null';
   const detail = redactCoordinates(raw);

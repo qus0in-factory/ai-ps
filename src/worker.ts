@@ -30,14 +30,16 @@ export default {
     const logger = createConsoleLogger({ level: env.LOG_LEVEL });
     const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
       : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
-    const model = createOpenAICompletion({
+    const modelConfig = {
       model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
-    });
+    };
+    const model = createOpenAICompletion(modelConfig);
+    const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'high' });
     const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
     return createApi({
       reply: createReply(createGateway(model, tools, createToolLogger(logger))),
       adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
-    queens: createQueensGenerator(model, { log: createQueensLogger(logger) }),
+    queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
     }).fetch(request);
   },
 };

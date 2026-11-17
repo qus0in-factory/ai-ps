@@ -111,6 +111,20 @@ describe('Given an OpenAI-compatible completion endpoint', () => {
 });
 
 describe('Given a JSON-mode completion without tools', () => {
+  for (const reasoningEffort of ['medium', 'high'] as const) {
+    it(`When a Queens-only gateway configures ${reasoningEffort} Then sends that reasoning effort without temperature or tool options`, async () => {
+      let body: Record<string, unknown> = {};
+      const model = createOpenAICompletion({ model: 'test', apiKey: 'test', reasoningEffort, fetcher: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({ choices: [{ message: { role: 'assistant', content: '{"regions":[]}' } }] });
+      } });
+      assert.equal((await model.complete([], { response_format: { type: 'json_object' } })).ok, true);
+      assert.equal(body.reasoning_effort, reasoningEffort);
+      assert.deepEqual(body.response_format, { type: 'json_object' });
+      for (const key of ['temperature', 'tools', 'tool_choice', 'parallel_tool_calls']) assert.equal(key in body, false);
+    });
+  }
+
   it('When only response_format json_object is passed Then omits temperature, reasoning_effort, tools, and tool_choice from the request body', async () => {
     let capturedBody: Record<string, unknown> | undefined;
     const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
