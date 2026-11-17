@@ -16,7 +16,7 @@ describe('Given the text tutor application', () => {
     assert.equal(greeting.ok, true); if (!greeting.ok) return;
     session.turns.push({ learner: '', tutor: greeting.value });
     assert.equal((await tutor.respond(session, ' 今日は散歩しました。 ')).ok, true);
-    assert.equal((await tutor.report(session)).ok, true); assert.equal(calls.length, 3);
+    assert.equal((await tutor.report(session)).ok, true); assert.equal(calls.length, 2);
     assert.equal(session.turns.length, 1);
   });
   it('When input is invalid or the history is full Then never calls the model', async () => {
@@ -44,7 +44,7 @@ describe('Given the text tutor application', () => {
       const mock = t.mock.method(AbortSignal, 'timeout', (ms: number) => { assert.equal(ms, 60000); return deadline.signal; });
       let signal: AbortSignal | undefined;
       const tutor = createTutor({ complete: async (_messages, options) => { signal = options?.signal; return await new Promise(() => {}); } });
-      const pending = tutor.respond(createSession(), undefined, caller.signal);
+      const pending = tutor.respond(createSession(), 'こんにちは', caller.signal);
       (kind === 'cancel' ? caller : deadline).abort();
       assert.equal((await pending).ok, false); assert.equal(signal?.aborted, true); mock.mock.restore();
     }

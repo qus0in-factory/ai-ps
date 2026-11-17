@@ -42,4 +42,13 @@ describe('Given POST /api/talk/transcribe', () => {
     const response = await api.request(path, { method: 'POST', body: upload() });
     assert.equal(response.status, 502); assert.doesNotMatch(await response.text(), /sk-secret|transcript/);
   });
+
+  it('When transcription succeeds Then logs only metadata and no transcript text', async () => {
+    const logs: unknown[] = [];
+    const api = createApi({ ...deps, talk: { tutor, transcriber: { transcribe: async () => ({ ok: true, value: '秘密の文' }) }, log: entry => logs.push(entry) } });
+    const response = await api.request(path, { method: 'POST', body: upload() });
+    assert.equal(response.status, 200);
+    assert.equal(logs.length, 1);
+    assert.ok(!JSON.stringify(logs[0]).includes('秘密'));
+  });
 });

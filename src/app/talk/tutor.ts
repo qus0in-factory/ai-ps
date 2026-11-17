@@ -1,19 +1,8 @@
 import type { CompletionGateway } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { TalkSession, Tutor, Reporter } from '../../domain/talk/types.ts';
-
-export interface TalkLogEntry {
-  event: 'turn' | 'report' | 'transcribe';
-  ok: boolean;
-  ms: number;
-  turns?: number;
-  learnerChars?: number;
-  replyChars?: number;
-  reportChars?: number;
-  inputBytes?: number;
-  outputChars?: number;
-}
-export type TalkLogListener = (entry: TalkLogEntry) => void;
+import type { TalkLogEntry, TalkLogListener } from '../../domain/talk/logging.ts';
+export type { TalkLogEntry, TalkLogListener } from '../../domain/talk/logging.ts';
 import { normalizeSession, record, only, text, canAddTurn, LIMITS } from '../../domain/talk/session.ts';
 import { TALK_FIXED_PHRASES } from '../../domain/talk/speech-cache.ts';
 import { parseTutorReply } from '../../domain/talk/reply.ts';
@@ -66,15 +55,18 @@ export function createTutor(model: CompletionGateway, options: { log?: TalkLogLi
       }
       const turns = input.value.session.turns.length;
       const learnerChars = input.value.text?.length ?? 0;
+      if (input.value.text === undefined) {
+        log?.({ event: 'turn', ok: true, ms: Date.now() - started, turns, learnerChars, replyChars: TALK_FIXED_PHRASES.greeting.length });
+        return { ok: true, value: { mood: 'smile', reply: TALK_FIXED_PHRASES.greeting, correction: null, betterExpression: null } };
+      }
       const result = await request(buildTutorMessages(input.value.session, input.value.text), true, signal);
       if (!result.ok) {
         log?.({ event: 'turn', ok: false, ms: Date.now() - started, turns, learnerChars });
         return result;
       }
       const value = parseTutorReply(result.value.content ?? '');
-      const replyChars = (input.value.text === undefined ? TALK_FIXED_PHRASES.greeting : value.reply).length;
-      log?.({ event: 'turn', ok: true, ms: Date.now() - started, turns, learnerChars, replyChars });
-      return { ok: true, value: input.value.text === undefined ? { ...value, reply: TALK_FIXED_PHRASES.greeting, correction: null, betterExpression: null } : value };
+      log?.({ event: 'turn', ok: true, ms: Date.now() - started, turns, learnerChars, replyChars: value.reply.length });
+      return { ok: true, value };
     },
     async report(session, signal) {
       const started = Date.now();
