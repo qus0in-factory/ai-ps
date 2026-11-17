@@ -6,6 +6,8 @@ import { createHttpChat } from './infra/http-chat.ts';
 import { createHttpAdventure } from './infra/http-adventure.ts';
 import { createLocalChatMemory } from './infra/local-chat-memory.ts';
 import { createAdventureStore } from './ui/state/adventure-store.ts';
+import { createTalkStore } from './ui/state/talk-store.ts';
+import { createHttpTalk } from './infra/http-talk.ts';
 import { App } from './ui/App.tsx';
 import './ui/styles/global.css';
 
@@ -13,6 +15,8 @@ const chat = createChat(createHttpChat(), createLocalChatMemory());
 const queens = createGenerationController(createHttpQueensGenerator());
 const adventureStore = createAdventureStore();
 const adventure = createHttpAdventure();
+const talkStore = createTalkStore();
+const talk = createHttpTalk();
 render(() => (
-  <App chat={chat} queens={queens} adventure={adventure} adventureStore={adventureStore} />
+  <App chat={chat} queens={queens} adventure={adventure} adventureStore={adventureStore} talk={talk} talkStore={talkStore} />
 ), document.getElementById('root')!);

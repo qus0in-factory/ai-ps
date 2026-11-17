@@ -5,11 +5,14 @@ import { bodyLimit } from 'hono/body-limit';
 import type { Reply } from '../../app/chat.ts';
 import { createProblem } from '../../app/problem.ts';
 import type { QueensGenerator } from '../../domain/queens/generation.ts';
+import type { Tutor, Reporter } from '../../domain/talk/types.ts';
+import { parseTurnRequest, parseReportRequest } from '../../app/talk/tutor.ts';
 
 export interface ApiDependencies {
   reply: Reply;
   queens: QueensGenerator;
   adventure: GameMaster;
+  talk?: { tutor: Tutor & Reporter };
 }
 
 type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; status: number; detail: string };
@@ -87,7 +90,7 @@ function progress(instance: string, failure: string, signal: AbortSignal, run: (
   });
 }
 
-export function createApi({ reply, queens, adventure }: ApiDependencies) {
+export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
   const api = new Hono();
   const limit = (maxSize: number, detail: string) => bodyLimit({ maxSize, onError: c => problem(413, detail, c.req.path) });
   const postOnly = (path: string) => api.all(path, () => problem(405, 'POST 요청만 가능합니다.', path, { Allow: 'POST' }));
@@ -139,6 +142,27 @@ export function createApi({ reply, queens, adventure }: ApiDependencies) {
     });
   });
   postOnly('/api/adventure/turn');
+
+  api.post('/api/talk/turn', limit(64_000, '대화 기록이 너무 큽니다.'), async c => {
+    const body = await readJson(c.req.raw);
+    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', c.req.path);
+    const input = parseTurnRequest(body.value);
+    if (!input.ok) return problem(400, input.reason, c.req.path);
+    if (!talk) return problem(502, '회화 서비스를 사용할 수 없습니다.', c.req.path);
+    const result = await talk.tutor.respond(input.value.session, input.value.text, c.req.raw.signal);
+    return result.ok ? c.json(result.value, 200, { 'Cache-Control': 'no-store' }) : problem(502, result.reason, c.req.path);
+  });
+  postOnly('/api/talk/turn');
+  api.post('/api/talk/report', limit(64_000, '대화 기록이 너무 큽니다.'), async c => {
+    const body = await readJson(c.req.raw);
+    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', c.req.path);
+    const input = parseReportRequest(body.value);
+    if (!input.ok) return problem(400, input.reason, c.req.path);
+    if (!talk) return problem(502, '회화 서비스를 사용할 수 없습니다.', c.req.path);
+    const result = await talk.tutor.report(input.value, c.req.raw.signal);
+    return result.ok ? c.json({ report: result.value }, 200, { 'Cache-Control': 'no-store' }) : problem(502, result.reason, c.req.path);
+  });
+  postOnly('/api/talk/report');
 
   api.notFound(c => problem(404, '요청한 API를 찾을 수 없습니다.', c.req.path));
   api.onError((_error, c) => problem(500, '요청을 처리하지 못했습니다.', c.req.path));

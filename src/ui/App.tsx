@@ -9,6 +9,9 @@ import { QueensPage } from './pages/QueensPage.tsx';
 import { ChatPage } from './pages/ChatPage.tsx';
 import { AdventurePage } from './pages/AdventurePage.tsx';
 import { IndexPage } from './pages/IndexPage.tsx';
+import { TalkPage } from './pages/TalkPage.tsx';
+import type { TalkClient } from '../domain/talk/types.ts';
+import type { TalkStore } from './state/talk-store.ts';
 
 // 서버 조회 query 는 없고 mutation 만 쓴다(무상태 서버). 재시도는 비용·비멱등 때문에 끈다.
 const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: 0 } } });
@@ -25,6 +28,8 @@ export function App(props: {
   queens: QueensGenerationController;
   adventure: AdventureClient;
   adventureStore: AdventureStore;
+  talk: TalkClient;
+  talkStore: TalkStore;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -33,6 +38,7 @@ export function App(props: {
         <Route path="/queens" component={() => <QueensPage queens={props.queens} />} />
         <Route path="/queen" component={RedirectToQueens} />
         <Route path="/chat" component={() => <ChatPage chat={props.chat} />} />
+        <Route path="/talk" component={() => <TalkPage client={props.talk} store={props.talkStore} />} />
         <Route path="/adventure" component={() => (
           <AdventurePage client={props.adventure} store={props.adventureStore} />
         )} />
