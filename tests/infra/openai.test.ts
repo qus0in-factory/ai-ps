@@ -84,6 +84,30 @@ describe('Given a tool-forced chat function completion', () => {
   });
 });
 
+describe('Given an OpenAI-compatible completion endpoint', () => {
+  it('When no base URL is configured Then posts to api.openai.com/v1/chat/completions by default', async () => {
+    let requestedUrl: string | undefined;
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (url) => {
+      requestedUrl = String(url);
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '기본 엔드포인트입니다.' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '안녕' }]);
+    assert.equal(result.ok, true);
+    assert.equal(requestedUrl, 'https://api.openai.com/v1/chat/completions');
+  });
+
+  it('When a base URL is configured Then posts to that endpoint instead', async () => {
+    let requestedUrl: string | undefined;
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', baseUrl: 'https://gateway.example.com/openai/v1/', fetcher: async (url) => {
+      requestedUrl = String(url);
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '게이트웨이 응답입니다.' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '안녕' }]);
+    assert.equal(result.ok, true);
+    assert.equal(requestedUrl, 'https://gateway.example.com/openai/v1/chat/completions');
+  });
+});
+
 describe('Given a JSON-mode completion without tools', () => {
   it('When only response_format json_object is passed Then omits temperature, reasoning_effort, tools, and tool_choice from the request body', async () => {
     let capturedBody: Record<string, unknown> | undefined;

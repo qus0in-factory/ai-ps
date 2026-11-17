@@ -4,7 +4,7 @@ import type { ToolDefinition } from '../domain/tools.ts';
 
 export async function completion(
   params: CompletionParams,
-  options: { apiKey?: string; signal?: AbortSignal; fetcher?: typeof fetch } = {},
+  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; fetcher?: typeof fetch } = {},
 ): Promise<Result<CompletionResponse>> {
   try {
     const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -12,7 +12,8 @@ export async function completion(
       throw new Error('OPENAI_API_KEY is required');
     }
 
-    const response = await (options.fetcher ?? fetch)('https://api.openai.com/v1/chat/completions', {
+    const baseUrl = (options.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const response = await (options.fetcher ?? fetch)(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -43,7 +44,7 @@ export async function completion(
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; fetcher?: typeof fetch },
+  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
@@ -63,7 +64,7 @@ export function createOpenAICompletion(
         ...(settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
       }, {
-        apiKey: config.apiKey, fetcher: config.fetcher, signal: settings.signal,
+        apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal,
       });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;

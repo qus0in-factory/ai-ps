@@ -16,6 +16,7 @@ const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFuncti
 const gateway = createGateway(createOpenAICompletion({
   model: process.env.OPENAI_MODEL,
   apiKey: process.env.OPENAI_API_KEY,
+  baseUrl: process.env.OPENAI_BASE_URL,
 }), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger));
 const result = await gateway.complete([
   { role: 'user', content: process.argv.slice(2).join(' ') || '안녕하세요!' },

@@ -5,7 +5,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"tests/**/*.test.ts\""
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "deploy": "pnpm build && wrangler deploy",
+    "cf:dev": "pnpm build && wrangler dev"
   },
   "devDependencies": {
     "@babel/parser": "^8.1.2",
@@ -15,7 +17,8 @@
     "pino-pretty": "^13.2.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vite-plugin-solid": "^2.11.16"
+    "vite-plugin-solid": "^2.11.16",
+    "wrangler": "^4.162.0"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
