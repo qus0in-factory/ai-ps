@@ -11,12 +11,15 @@
 | `ps-hf` | 문서 동기화·소규모 구현·가벼운 확인 | OpenCode (`Hy4 flash Free`, 공급자 OpenCode Go) | Default |
 | `ps-astra` | 리뷰 전용(구현 코드). 파일 수정·커밋 금지. 결과는 `/tmp/astra-<주제>.md` | Codex (`GPT-6-Astra`, Fast) | high |
 | `ps-fable` | 설계·리뷰 전용. 파일 수정·커밋 금지. 결과는 `/tmp/fable-<주제>.md` | Claude Code (`Fable 5.1`) | high |
+| `ps-beam` | 별도 트랙 경량 구현·후속 수정(사용자 지정으로 상시 사용) | OpenCode (`Beam Free`, 공급자 OpenCode Go, 기본 모델) | Default |
 
 - 모델·fast 모드 변경은 사용자가 한다. effort는 총괄이 작업 성격에 맞춰 세션 한정으로 바꿀 수 있다(Codex는 `s`, enter 금지). 재시작 뒤에는 상태줄에서 effort를 다시 확인한다.
 
 ## 배치 규칙
 - 워커는 각자 **새 탭**에 연다(`scripts/herdr-open-worker.sh`). split은 사용자가 "같은 탭에"라고 말할 때만.
-- 열자마자 모델 선택과 라벨링을 끝낸 뒤 지시를 보낸다. OpenCode는 기본 모델(Beam)로 뜨므로 모델 선택 전에는 지시를 보내지 않는다.
+- 열자마자 모델 선택과 라벨링을 끝낸 뒤 지시를 보낸다. OpenCode는 기본 모델(Beam)로 뜨므로 모델 선택 전에는 지시를 보내지 않는다. 단 `ps-beam`은 Beam이 목표 모델이므로 `/models` 없이 상태줄 `Beam Free` 확인 후 `herdr agent rename`·`pane rename`으로 라벨만 붙인다(open 스크립트의 `/models` 단계는 이 경우 메뉴 확인에 실패한다).
+- 위임 단위: 한 지시는 워커가 5분 안에 끝낼 크기로 자른다. 쪼갤 수 없으면 최대 15분. 실모델 스모크·느린 테스트도 이 시간에 포함한다. 넘을 것 같으면 단계로 나눠 순서대로 보내고, 지시에 "예상 5분/15분"을 적는다.
+- 교차 리뷰: 리뷰어는 구현자와 모델 계열이 다른 에이전트로 고른다. 계열은 OpenAI(`ps-sol`·`ps-astra`), Anthropic(`ps-opus`·`ps-fable`), DeepSeek(`ps-ds`), Hy4(`ps-hf`), Beam(`ps-beam`). 기본 짝은 OpenAI 구현→`ps-fable` 리뷰, Anthropic·DeepSeek·Hy4·Beam 구현→`ps-astra` 리뷰. 같은 계열밖에 없을 때만 예외로 하고 보고에 적는다.
 - watcher(`worker-watcher`)는 워커 1명당 1개. 지시에 워커 이름·결과 파일 경로·전송 시각을 준다.
 - 같은 작업 트리에서 여러 워커가 일할 때 지시에 "다른 워커 담당 파일" 목록을 넣는다(지시 템플릿 참고).
 
@@ -31,5 +34,5 @@ pnpm은 --config.store-dir=/Users/young-mini/Library/pnpm/store로 실행하고 
 ```
 
 ## 모델 약칭 및 감지 매핑
-- 접두어 `ps-`. Codex는 상태줄 `GPT-6.1-Sol`→`sol`, `GPT-6-Astra`→`astra`(agent 필드만으로 판정하지 않는다). OpenCode는 `DeepSeek <버전>`→`ds`, `Hy4 flash`→`hf`, `Beam Free`→`beam`(미선택 상태로 취급). Claude는 `Opus|Fable <버전>`→`opus`|`fable`.
+- 접두어 `ps-`. Codex는 상태줄 `GPT-6.1-Sol`→`sol`, `GPT-6-Astra`→`astra`(agent 필드만으로 판정하지 않는다). OpenCode는 `DeepSeek <버전>`→`ds`, `Hy4 flash`→`hf`, `Beam Free`→`beam`(`ps-beam` 외 워커에서는 미선택 상태로 취급). Claude는 `Opus|Fable <버전>`→`opus`|`fable`.
 - 정본 패턴은 `scripts/herdr-label-models.sh`의 `detect()`다.
