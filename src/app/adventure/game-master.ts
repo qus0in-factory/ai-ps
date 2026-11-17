@@ -1,9 +1,9 @@
-import type { FunctionCompletionGateway, CompletionMessage } from '../../domain/completion.ts';
+import type { FunctionCompletionGateway, CompletionMessage, CompletionOptions } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { AdventureSession, AdventureListener, GameMaster } from '../../domain/adventure/types.ts';
 import type { AdventureLogListener } from '../../domain/adventure/logging.ts';
 import { createSession, normalizeSession, MAX_TURNS, record, text } from '../../domain/adventure/session.ts';
-import { buildTurnMessages, trimHistory } from '../../domain/adventure/history.ts';
+import { buildTurnMessages, trimHistory, splitForSummary, buildSummaryMessages, applySummary } from '../../domain/adventure/history.ts';
 import { parseTurnOutcome } from '../../domain/adventure/outcome.ts';
 import { applyTurn } from '../../domain/adventure/rules.ts';
 import { DICE_TOOL, rollDice } from '../../domain/adventure/dice.ts';
@@ -25,7 +25,7 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
     const timeout = AbortSignal.timeout(90_000);
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
   };
-  async function request(messages: CompletionMessage[], signal?: AbortSignal, tools = [DICE_TOOL]) {
+  async function request(messages: CompletionMessage[], signal?: AbortSignal, tools = [DICE_TOOL], summarize = false) {
     if (signal?.aborted) return cancelled();
     let cancel: (() => void) | undefined;
     try {
@@ -33,7 +33,10 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
         cancel = () => resolve(cancelled());
         signal?.addEventListener('abort', cancel, { once: true });
       });
-      const result = await Promise.race([model.complete(messages, tools, { max_completion_tokens: 1600, response_format: { type: 'json_object' }, ...(temp === undefined ? {} : { temperature: temp }), ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
+      const options: CompletionOptions = summarize
+        ? { max_completion_tokens: 400, reasoning_effort: 'none', ...(temp === undefined ? {} : { temperature: 0.3 }) }
+        : { max_completion_tokens: 1600, response_format: { type: 'json_object' }, ...(temp === undefined ? {} : { temperature: temp }) };
+      const result = await Promise.race([model.complete(messages, tools, { ...options, ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
       if (result.ok && (typeof result.value.content === 'string' && result.value.content.length > 16_000)) return { ok: false as const, reason: '모험 응답 크기 제한을 초과했습니다.' };
       return result;
     } catch { return { ok: false as const, reason: '모험 응답을 가져오지 못했습니다.' }; }
@@ -92,9 +95,16 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
       onEvent?.({ kind: 'narrative', text: parsed.value.narrative });
       onEvent?.({ kind: 'state', state, applied });
       if (state.ending) onEvent?.({ kind: 'ending', ending: state.ending, day: state.day });
-      const updated = trimHistory({ ...session, state, turn: session.turn + 1,
+      let updated: AdventureSession = { ...session, state, turn: session.turn + 1,
         recent: [...session.recent, { action, narrative: parsed.value.narrative.slice(0,400) }],
-      });
+      };
+      const split = splitForSummary(updated);
+      if (split) {
+        const response = await request(buildSummaryMessages(updated.summary, split.old), signal, [], true);
+        const summary = response.ok && typeof response.value.content === 'string' ? response.value.content.trim() : undefined;
+        updated = applySummary(updated, summary);
+        log?.({ event: summary ? 'summary' : 'summary_error', turn: updated.turn });
+      } else updated = trimHistory(updated);
       log?.({ event: 'turn_complete', turn: updated.turn, narrativeLength: parsed.value.narrative.length });
       return { ok: true, value: updated };
     },

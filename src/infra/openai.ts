@@ -88,6 +88,7 @@ export function createOpenAICompletion(
         ...(functions.length && settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),
         ...(functions.length && settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
+        ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
       }, {
         debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal,
       });

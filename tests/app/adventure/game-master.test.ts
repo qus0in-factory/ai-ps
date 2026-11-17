@@ -123,3 +123,60 @@ describe('Given tool-specific adventure options', () => {
     assert.deepEqual(seen, [{ tools: 0, parallel: false }, { tools: 1, parallel: true }]);
   });
 });
+
+describe('Given summary replacement after a valid turn', () => {
+  const sessionWith = (length: number, summary?: string) => ({ ...createSession(), recent: Array.from({ length }, (_, i) => ({ action: '행동 ' + i, narrative: '당신은 둘러봅니다.' })), ...(summary ? { summary } : {}) });
+  for (const temperature of [undefined, '', 1]) {
+    it(`When eight recent turns exist and temperature is ${String(temperature)} Then summarizes after state using one tool-free bounded request`, async () => {
+      let calls = 0;
+      let turnSignal: AbortSignal | undefined;
+      const events: AdventureEvent[] = [];
+      const logs: unknown[] = [];
+      const gm = createGameMaster({ complete: async (_messages, tools, options) => {
+        if (calls++ === 0) { turnSignal = options?.signal; return { ok: true, value: answer }; }
+        assert.equal(events.at(-1)!.kind, 'state'); assert.deepEqual(tools, []);
+        assert.equal(options?.max_completion_tokens, 400); assert.equal(options?.reasoning_effort, 'none');
+        assert.equal(options?.temperature, temperature === 1 ? 0.3 : undefined);
+        assert.equal(Object.hasOwn(options!, 'parallel_tool_calls'), false);
+        assert.equal(Object.hasOwn(options!, 'response_format'), false);
+        assert.equal(options?.signal, turnSignal);
+        return { ok: true, value: { role: 'assistant', content: '  당신은 밧줄을 챙깁니다.  ' } };
+      } }, { temperature, log: event => logs.push(event) });
+      const result = await gm.turn(sessionWith(8, '당신은 렌즈를 찾았습니다.'), '대기', e => events.push(e));
+      assert.equal(result.ok, true); assert.equal(calls, 2);
+      if (result.ok) { assert.equal(result.value.recent.length, 4); assert.equal(result.value.summary, '당신은 밧줄을 챙깁니다.'); }
+      assert.deepEqual(events.map(e => e.kind), ['accepted','narrative','state']);
+      assert.ok(logs.some(entry => (entry as { event: string }).event === 'summary'));
+    });
+  }
+  for (const failure of ['error', 'throw', 'empty', 'null', 'timeout']) {
+    it(`When summarization returns ${failure} Then still completes the turn, keeps the old summary, and drops old records without retry`, async () => {
+      let calls = 0;
+      const logs: { event: string }[] = [];
+      const controller = new AbortController();
+      const gm = createGameMaster({ complete: async () => {
+        if (calls++ === 0) return { ok: true, value: answer };
+        if (failure === 'throw') throw new Error('private provider message');
+        if (failure === 'timeout') { controller.abort(); return await new Promise(() => {}); }
+        if (failure === 'error') return { ok: false, reason: '공급자 오류' };
+        return { ok: true, value: { role: 'assistant', content: failure === 'null' ? null : '  ' } };
+      } }, { log: event => logs.push(event) });
+      const session = sessionWith(8, '기존 요약');
+      const result = await gm.turn(session, '대기', undefined, controller.signal);
+      assert.equal(result.ok, true); assert.equal(calls, 2);
+      if (result.ok) { assert.equal(result.value.summary, '기존 요약'); assert.equal(result.value.recent.length, 4); assert.equal(result.value.turn, 1); }
+      assert.ok(logs.some(entry => entry.event === 'summary_error'));
+      assert.equal(session.recent.length, 8);
+    });
+  }
+  it('When seven records become eight Then keeps originals without summarizing; invalid turns never trigger summary', async () => {
+    for (const valid of [true, false]) {
+      let calls = 0;
+      const gm = createGameMaster({ complete: async () => { calls++; return { ok: true, value: valid ? answer : { role: 'assistant', content: 'invalid' } }; } });
+      const session = sessionWith(valid ? 7 : 8);
+      const result = await gm.turn(session, '대기');
+      assert.equal(calls, 1); assert.equal(result.ok, true);
+      if (result.ok) { assert.equal(result.value.recent.length, 8); assert.ok(!result.value.summary); if (!valid) assert.deepEqual(result.value.state, session.state); }
+    }
+  });
+});

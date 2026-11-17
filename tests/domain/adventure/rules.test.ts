@@ -70,7 +70,7 @@ describe('Given untrusted sessions and model outcomes', () => {
     const session = createSession();
     session.recent = Array.from({ length: 7 }, (_, i) => ({ action: '행동 ' + i, narrative: 'x'.repeat(500) }));
     const trimmed = trimHistory(session);
-    assert.equal(trimmed.recent.length, 4);
+    assert.equal(trimmed.recent.length, 7);
     assert.ok(trimmed.recent.every(record => record.narrative.length <= 400));
     const messages = buildTurnMessages(trimmed, ' 둘러보기 ');
     assert.equal(messages[0]!.role, 'system'); assert.ok(messages.every(message => message.role !== 'tool'));
@@ -119,7 +119,7 @@ describe('Given the slim adventure contract', () => {
     session.recent = Array.from({ length: 5 }, (_, i) => ({ action: '행동' + i, narrative: '서술' + i }));
     const trimmed = trimHistory(session);
     const messages = buildTurnMessages(trimmed, '대기');
-    assert.equal(trimmed.recent[0]!.action, '행동1'); assert.equal(messages.length, 10);
+    assert.equal(trimmed.recent[0]!.action, '행동0'); assert.equal(messages.length, 12);
     assert.ok(!messages.at(-1)!.content!.includes('[일지]'));
   });
 });

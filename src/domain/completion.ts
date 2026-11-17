@@ -26,6 +26,7 @@ export interface CompletionGateway {
 }
 
 export interface CompletionOptions {
+  reasoning_effort?: 'none';
   max_completion_tokens?: number;
   response_format?: { type: 'json_object' };
   temperature?: number;

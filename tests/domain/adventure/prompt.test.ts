@@ -32,3 +32,12 @@ describe('Given approachable adventure actions', () => {
     assert.ok(!SYSTEM_PROMPT.includes('d20에서 15 이상'));
   });
 });
+
+describe('Given impossible player actions', () => {
+  it('When the input is outside the world Then requests a natural failed attempt without interrupting play', () => {
+    assert.match(SYSTEM_PROMPT, /세계에 없는 능력.*실패.*묘사/);
+    assert.ok(SYSTEM_PROMPT.includes('맨손으로 바위를 부수는'));
+    assert.match(SYSTEM_PROMPT, /이해할 수 없는 명령.*답하지/);
+    assert.match(SYSTEM_PROMPT, /흐름.*유지/);
+  });
+});

@@ -7,10 +7,10 @@
 | 항목 | 결정 |
 |---|---|
 | 게임 | **「잿빛 등대」**. 폭풍으로 고립된 등대지기 견습생이 닷새 안에 꺼진 등대를 다시 켜 암초 해역을 지날 배를 구한다. 생존이 아니라 **기한 안의 복구**가 목표 |
-| 모델 호출 | 기존 `createOpenAICompletion`의 function 게이트웨이 재사용. 1턴 = JSON 응답(서술+변화량) 1회 + 주사위 도구 왕복 최대 3회(응답당 2개). `response_format: json_object`. `ADVENTURE_TEMPERATURE`를 명시한 경우에만 `temperature` 전송 |
-| 서버 | **무상태**. 세션(상태·최근 4턴)은 클라이언트가 보관해 매 요청에 보내고, 서버는 검증 후 새 세션을 돌려준다. Workers에 저장소를 두지 않는다 |
+| 모델 호출 | 기존 `createOpenAICompletion`의 function 게이트웨이 재사용. 1턴 = JSON 응답(서술+변화량) 1회 + 주사위 도구 왕복 최대 3회(응답당 2개). `response_format: json_object`. `ADVENTURE_TEMPERATURE`를 명시한 경우에만 `temperature` 전송. 요약 호출은 도구 없이 `max_completion_tokens: 400`·`reasoning_effort: 'none'` |
+| 서버 | **무상태**. 세션(상태·최근 4~8턴·요약)은 클라이언트가 보관해 매 요청에 보내고, 서버는 검증 후 새 세션을 돌려준다. Workers에 저장소를 두지 않는다 |
 | 스트리밍 | NDJSON 이벤트. `narrative`는 한 번만 보낸다. 토큰 스트리밍 없음 |
-| 히스토리 | 최근 4턴 원문(각 400자) + 현재 상태 JSON |
+| 히스토리 | 최근 4~8턴 원문(각 400자) + 오래된 턴의 요약(≤600자) + 현재 상태 JSON |
 | 실패 | 파싱 실패 턴은 무효(상태·이력 불변, `turn`만 증가). 변화량 범위 초과는 클램프. 모델 오류는 problem 프레임 |
 | UI | SolidJS 페이지 `/adventure`. 클라이언트 상태 zustand(vanilla+persist, `session`만) + Solid 브리지, 턴 요청은 TanStack Query mutation. 진행 중에는 입력·새 게임 비활성 |
 | 에셋 | 스크립트 1회 생성 → `public/adventure/` 커밋. 런타임 생성 없음 |
@@ -57,7 +57,7 @@ src/domain/adventure/
   rules.ts        applyTurn(state, outcome) → { state, applied }  순수·결정적
   outcome.ts      parseTurnOutcome(content) → Result<TurnOutcome>  (형식·범위 검증, {…} 구간 재파싱)
   dice.ts         rollDice(sides, difficulty, random) · DICE_TOOL 정의(strict 스키마)
-  history.ts      buildTurnMessages(session, action) · 최근 4턴 원문 관리
+  history.ts      buildTurnMessages(session, action) · splitForSummary/buildSummaryMessages/applySummary · 최근 4~8턴·요약 관리
   session.ts      isAdventureSession(value) 타입 가드 · createSession()
 src/app/adventure/
   game-master.ts  createGameMaster(model: FunctionCompletionGateway, { random?, log?, temperature? })
@@ -126,8 +126,9 @@ export interface TurnRecord { action: string; narrative: string }  // 400자로 
 export interface AdventureSession {
   version: 1;
   state: GameState;
-  recent: TurnRecord[];              // 최근 ≤ 4턴
-  turn: number;                      // 누적 턴 수
+  summary?: string;                 // 오래된 턴의 모델 요약, 1..600자
+  recent: TurnRecord[];             // 최근 ≤ 8턴
+  turn: number;                     // 누적 턴 수
 }
 
 export type AdventureEvent =
@@ -168,14 +169,15 @@ DICE_TOOL = { name: 'roll_dice',
 ## 4. 턴 처리 흐름 (`game-master.ts`)
 
 1. `accepted` 이벤트(trim한 행동).
-2. 메시지 구성(`buildTurnMessages`): `system`(규칙 전문) → 최근 4턴을 `user: 행동` / `assistant: 서술 텍스트만` 쌍으로 → 마지막 `user`: `[현재 상태 JSON]\n…\n행동: …`.
+2. 메시지 구성(`buildTurnMessages`): `system`(규칙 전문) → `summary`가 있으면 `user: [이전 진행 요약]\n…` → 최근 4~8턴을 `user: 행동` / `assistant: 서술 텍스트만` 쌍으로 → 마지막 `user`: `[현재 상태 JSON]\n…\n행동: …`.
 3. `model.complete(messages, [DICE_TOOL], { response_format: { type: 'json_object' }, temperature, signal })`.
 4. `tool_calls`가 있으면 각 호출을 `rollDice`로 처리해 `dice` 이벤트를 내고 `role: 'tool'` 메시지로 추가한 뒤 재호출. 응답당 2개, 왕복 최대 3회(상수). 초과 시 마지막 응답을 그대로 파싱 시도.
 5. `parseTurnOutcome(content)`. 실패 → `invalid` 이벤트, `turn+1`만 하고 상태·이력 불변, 로그 `warn`. (책의 "무효 턴" 원칙)
 6. `applyTurn(state, outcome)` → 새 상태와 `applied`. `state` 이벤트. 엔딩이 생기면 `ending` 이벤트.
 7. `narrative` 이벤트를 한 번 보낸다. 순서는 **dice → narrative → state**로 고정해 화면이 "주사위 → 글 → 수치"로 읽히게 한다.
-8. `recent`에 `{ action, narrative(400자) }`를 추가하고 4개를 넘기면 오래된 턴을 버린다.
-9. 결과 세션 반환. 모델 오류(`ok: false`)는 그대로 반환 → API가 502 problem 프레임.
+8. `recent`에 `{ action, narrative(400자) }`를 추가해 최대 8개를 유지한다. 9개가 되는 순간 앞 5개와 이전 `summary`를 요약해 새 `summary`로 교체하고 뒤 4개만 남긴다. 첫 요약은 9번째 유효 턴, 그 뒤로 5턴마다 한 번이다.
+9. 요약 호출은 `state`(엔딩이면 `ending`) 이벤트 뒤, `result` 전에 1회다. 도구 없이 `max_completion_tokens: 400`·`reasoning_effort: 'none'`을 보내고, `ADVENTURE_TEMPERATURE`가 설정된 경우에만 `temperature: 0.3`을 보낸다. 실패·빈 응답·취소여도 이전 `summary`를 유지하고 `recent`만 4개로 줄여 턴은 성공으로 반환한다. 재시도와 공개 이벤트는 없다.
+10. 결과 세션 반환. 모델 오류(`ok: false`)는 그대로 반환 → API가 502 problem 프레임.
 
 `start`는 2~3단계를 "첫 장면을 묘사하라" 메시지로 수행하고 `statChanges` 등은 무시한 채 `narrative`만 쓴다. 상태는 `START_STATE` 그대로.
 
@@ -188,7 +190,7 @@ system 절 순서: 역할 1줄 → 배경(등대·폭풍·보급선 기한) → 
 - 세션: 허용 필드만 검사해 새 객체로 재구성(B1), 문자열·배열 길이 제한.
 - 도구: 응답당 2개·왕복 3회, ID·인수 길이 제한, 원본 무제한 `tool_calls` 이력 유입 차단.
 - 시간: 공급자 요청 60초, 서버 전체 90초, 클라이언트 120초, 외부 취소와 합성.
-- 출력: 1_600토큰·본문 16_000자·서술 1_200자·최근 4턴×400자.
+- 출력: 서술 1_600토큰·본문 16_000자·서술 1_200자·최근 8턴×400자·요약 600자(요약 호출 400토큰).
 - 상태: 0~100 클램프, 변화량 ±40, 아이템 중복·개수 방어, 수리 부품·장소·집중 재검증, 엔딩 재검증.
 - 로그: 서술 원문 없이 이벤트만, 공급자 오류는 안전 코드·상태만 기록.
 
@@ -201,6 +203,8 @@ system 절 순서: 역할 1줄 → 배경(등대·폭풍·보급선 기한) → 
 | 도구 3라운드 초과 | 마지막 응답 파싱. `tool_calls`만 있고 내용 없으면 무효 턴 |
 | 모델 오류·타임아웃(공급자 60초, 서버 전체 90초) | problem 502. 클라이언트 세션 유지, 재시도 버튼 |
 | 클라이언트 타임아웃 | 120초. 초과 시 세션 유지 |
+
+세계관 밖 입력은 프롬프트로만 막는다. 가끔 모델이 들어주더라도 수치는 클램프·재검증이 지키므로 치명적이지 않다(책 5.1.1). 요약 호출이 실패해도 본 턴은 성공한다.
 
 ## 5. UI 설계 (ps-ds)
 
@@ -288,7 +292,7 @@ system 절 순서: 역할 1줄 → 배경(등대·폭풍·보급선 기한) → 
 
 | # | 위험 | 대응·결정 필요 |
 |---|---|---|
-| 1 | **비용**: 턴당 최대 4회 호출(도구 왕복 3회). 공개 URL 무인증 | 왕복 3회·응답당 2개·서버 90초·bodyLimit·action 200자를 상수로 고정. Cloudflare rate limiting은 운영 작업으로 별도 결정 |
+| 1 | **비용**: 턴당 최대 4회 호출(도구 왕복 3회) + 요약 호출(9번째 유효 턴부터 5턴마다 1회). 공개 URL 무인증 | 왕복 3회·응답당 2개·서버 90초·bodyLimit·action 200자를 상수로 고정. Cloudflare rate limiting은 운영 작업으로 별도 결정 |
 | 2 | **temperature 거부**: reasoning 계열 모델은 `temperature`를 거절할 수 있다 | `ADVENTURE_TEMPERATURE`만 선택 설정(미설정·빈 값이면 미전송). 첫 배포 전 1턴 스모크 |
 | 3 | **`strict: true` + `reasoning_effort: 'none'` 고정** | 도구 스키마는 strict 호환으로 작성. 공급자 교체 시 호환성 확인 필요 |
 | 4 | **JSON 파싱 실패 빈도** | `response_format: json_object` + `{…}` 재파싱 + 무효 턴. 로그로 빈도 측정 후 재요청 추가 여부 결정 |
@@ -309,3 +313,6 @@ system 절 순서: 역할 1줄 → 배경(등대·폭풍·보급선 기한) → 
 - 서술 문장 쪼개기 의사 스트리밍(`index`·`final`): 제거. `narrative` 이벤트 1개.
 - 요청 세대(`request`) 비교: 제거. 진행 중 입력·새 게임 비활성으로 대체.
 - 설정 옵션 노브(`maxToolRounds`·`maxCompletionTokens`·`deadlineMs`·HTTP timeout): 제거. `ADVENTURE_TEMPERATURE`만 선택, 나머지는 상수(3왕복·2개·1600토큰·서버 90초·클라 120초).
+
+## 변경 이력: 5.1.1 반영
+- 코드 일지를 복원하지 않고 잘려 나가는 턴을 모델 요약 1개(`summary`, ≤600자)로 대체했다. `recent`는 최대 8개, 9개가 되는 순간 앞 5개와 이전 요약을 요약해 뒤 4개를 남긴다(첫 요약은 9번째 유효 턴, 이후 5턴마다). 도구 메시지는 턴 안에서만 쓰므로 쌍 경계 보정은 불필요하다.

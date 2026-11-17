@@ -246,3 +246,17 @@ describe('Given tool-specific completion options without tools', () => {
     });
   }
 });
+
+describe('Given an explicit reasoning option for a tool-free summary', () => {
+  it('When reasoning none is requested Then forwards it independently of tool-only options', async () => {
+    let body: Record<string, unknown> = {};
+    const model = createOpenAICompletion({ model: 'test', apiKey: 'test', fetcher: async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      assert.ok(!('tools' in body)); assert.ok(!('parallel_tool_calls' in body)); assert.ok(!('tool_choice' in body));
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '당신은 렌즈를 찾았습니다.' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '이전 진행을 요약하라.' }], [], { reasoning_effort: 'none', max_completion_tokens: 400 });
+    assert.equal(result.ok, true); assert.equal(body.reasoning_effort, 'none'); assert.equal(body.max_completion_tokens, 400);
+    assert.ok(!('temperature' in body));
+  });
+});

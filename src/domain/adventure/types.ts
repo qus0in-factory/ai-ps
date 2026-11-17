@@ -1,6 +1,9 @@
 import type { Result } from '../chat.ts';
 
 export const SHIP_DAY = 5;
+export const RECENT_MAX = 8;
+export const RECENT_KEEP = 4;
+export const SUMMARY_MAX = 600;
 export type TimeOfDay = 'dawn' | 'day' | 'dusk' | 'night';
 export type Weather = 'clear' | 'fog' | 'storm';
 export type LocationId = 'quarters' | 'stairwell' | 'lantern-room' | 'shore' | 'boathouse' | 'cliff-path';
@@ -42,7 +45,8 @@ export interface TurnRecord { action: string; narrative: string }  // narrative�
 export interface AdventureSession {
   version: 1;
   state: GameState;
-  recent: TurnRecord[];              // 최근 ≤ 4턴
+  summary?: string;                 // 오래된 턴의 모델 요약, 1..600자
+  recent: TurnRecord[];              // 최근 ≤ 8턴
   turn: number;                      // 누적 턴 수
 }
 
