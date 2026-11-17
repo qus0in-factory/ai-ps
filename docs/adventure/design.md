@@ -248,7 +248,7 @@ system 절 순서: 역할 1줄 → 배경(등대·폭풍·보급선 기한) → 
 
 ### 모델 선택 결과와 후처리 (2026-11-17)
 - `gpt-image-2.6-flare`로 통일했다. 64px로 줄였을 때 얼굴 비중이 커 가독성이 좋았고, 생성 시간도 `sunburst`의 54.3초에 비해 23.8초로 약 2배 빨랐다.
-- `portrait-ok`는 비교본 `/tmp/adventure-assets/compare/flare.png`를 재사용했고, 초상 변형 2장은 같은 원본을 참조 이미지로 `/v1/images/edits`로 생성했다.
+- `portrait-ok`는 비교본 `/tmp/adventure-assets/compare/flare.png`를 재사용했고, 변형 중 `portrait-hurt`만 같은 원본을 참조 이미지로 `/v1/images/edits`를 한 번 호출해 만들었다. `portrait-cold`는 API 호출 없이 `portrait-ok`의 팔레트 스왑으로 만들었다.
 - 후처리는 Python Pillow 13(`scripts/adventure-postprocess.py`, `python3 -I` 실행)으로 마젠타 키잉 → 16색 리맵 → NEAREST 축소를 한 번에 처리한다. `sips` 축소본은 쓰지 않는다.
 - **변형 초상은 팔레트 스왑이 1순위다.** 기준 초상(`portrait-ok`)의 피부·볼 색만 16색 팔레트 안의 차가운 청회색으로 치환해 만든다(`--palette-swap`). 알파 채널이 원본과 픽셀 단위로 같아 모자·외투·머리카락·윤곽선이 그대로 유지된다. API 참조 편집(`/v1/images/edits`)은 배경을 마젠타로 유지하지 못해 불안정하므로 후순위로 둔다.
 
