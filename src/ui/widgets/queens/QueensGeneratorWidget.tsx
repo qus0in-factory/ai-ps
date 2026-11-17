@@ -1,10 +1,13 @@
 import { A } from '@solidjs/router';
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import type { QueensGenerationController } from '../../../app/queens/generation-store.ts';
 import { createPlayController, type PlayState, type QueensPlayController } from '../../../app/queens/play-store.ts';
 import { QueensBoard } from '../../components/queens/QueensBoard.tsx';
+import { Select } from '../../components/select/Select.tsx';
 import { GenerationLog } from './GenerationLog.tsx';
 import './QueensGeneratorWidget.css';
+
+const sizes = [5, 6, 7, 8, 9].map((size) => ({ value: String(size), label: `${size}×${size}` }));
 
 export function QueensGeneratorWidget(props: { controller: QueensGenerationController }) {
   const [state, setState] = createSignal(props.controller.getState());
@@ -32,9 +35,8 @@ export function QueensGeneratorWidget(props: { controller: QueensGenerationContr
       <p>코드가 무작위로 퀸 정답 배치를 만들고, AI가 그 배치가 유일한 정답이 되도록 색상 영역을 디자인합니다. 알고리즘이 영역 연결성과 정답의 유일성을 검증합니다.</p>
       <p class="queens-note">검증에 실패하면 피드백을 전달해 최대 10회 재시도합니다. 생성에 실패할 수 있습니다.</p>
       <form onSubmit={(event) => { event.preventDefault(); void props.controller.generate(); }}>
-        <label>격자 크기 <select aria-label="격자 크기" disabled={state().pending} value={state().size} onChange={(event) => props.controller.setSize(Number(event.currentTarget.value))}>
-          <For each={[5,6,7,8,9]}>{(size) => <option value={size}>{size}×{size}</option>}</For>
-        </select></label>
+        <label>격자 크기 <Select label="격자 크기" value={state().size} options={sizes} disabled={state().pending}
+          onChange={(value) => props.controller.setSize(Number(value))} /></label>
         <button type="submit" disabled={state().pending}>{state().pending ? '생성 중…' : '만들기'}</button>
       </form>
       <Show when={state().error}><p class="queens-error" role="alert">{state().error}</p></Show>

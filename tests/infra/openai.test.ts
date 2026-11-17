@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createOpenAICompletion } from '../../src/infra/openai.ts';
+import { completion, createOpenAICompletion } from '../../src/infra/openai.ts';
 import { createToolChat } from '../../src/app/tool-chat.ts';
 import { createTools } from '../../src/infra/tools.ts';
 import { readFileSync } from 'node:fs';
@@ -74,7 +74,9 @@ describe('Given a tool-forced chat function completion', () => {
       assert.equal(body.parallel_tool_calls, false);
       assert.deepEqual(body.tool_choice, { type: 'function', function: { name: 'verify_puzzle' } });
       assert.equal(body.signal, undefined);
-      assert.equal(init!.signal, controller.signal);
+      assert.notEqual(init!.signal, controller.signal);
+      controller.abort();
+      assert.equal(init!.signal!.aborted, true);
       return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [] } }] });
     } });
     const result = await model.complete([{ role: 'user', content: '퍼즐 검증' }], [{ name: 'verify_puzzle', description: 'Verify puzzle', parameters: { type: 'object', properties: {}, additionalProperties: false, required: [] } }], {
@@ -126,5 +128,78 @@ describe('Given a JSON-mode completion without tools', () => {
     assert.equal('reasoning_effort' in capturedBody, false);
     assert.equal('tools' in capturedBody, false);
     assert.equal('tool_choice' in capturedBody, false);
+  });
+});
+
+
+describe('Given untrusted completion provider failures', () => {
+  for (const kind of ['json', 'text', 'network'] as const) {
+    it(`When a ${kind} failure contains credentials Then returns a generic reason and logs only bounded redacted diagnostics`, async t => {
+      const apiKey = 'FAKE_REVIEW_KEY_DO_NOT_USE';
+      const otherKey = 'sk-proj-otherProviderSecret123456789';
+      const url = 'https://user:password@gateway.example/v1?token=private-query';
+      const message = `provider diagnostic: ${apiKey} ${otherKey} Bearer bearer-private-value ${url} api_key=another-private-value ` + 'x'.repeat(2_000);
+      const logs: unknown[] = [];
+      t.mock.method(console, 'error', (entry: unknown) => logs.push(entry));
+      const model = createOpenAICompletion({
+        model: 'test-model', apiKey,
+        fetcher: async () => {
+          if (kind === 'network') throw new Error(message);
+          return kind === 'json'
+            ? Response.json({ error: { message } }, { status: 401 })
+            : new Response(message, { status: 502, statusText: 'Bad Gateway' });
+        },
+      });
+      const chat = createToolChat(model, [], entry => logs.push(entry));
+      const result = await chat.complete([{ role: 'user', content: 'hello' }]);
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.reason, kind === 'network'
+        ? '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'
+        : `모델 공급자 요청에 실패했습니다. (HTTP ${kind === 'json' ? 401 : 502})`);
+      const serialized = JSON.stringify({ result, logs });
+      for (const secret of [apiKey, otherKey, 'bearer-private-value', 'private-query', 'password', 'another-private-value']) {
+        assert.ok(!serialized.includes(secret), `must redact ${secret}`);
+      }
+      const diagnostic = logs.find(entry => (entry as { event?: string }).event === 'completion_error') as { message: string; status?: number } | undefined;
+      assert.ok(diagnostic, 'must record a sanitized provider diagnostic');
+      assert.ok(diagnostic.message.length <= 512);
+      assert.ok(!result.reason.includes('provider diagnostic'));
+      if (kind !== 'text') assert.match(diagnostic.message, /provider diagnostic/);
+    });
+  }
+});
+
+describe('Given a completion caller cancellation signal', () => {
+  it('When a caller signal is supplied Then also enforces the 60 second deadline', async t => {
+    const caller = new AbortController();
+    const deadline = new AbortController();
+    const durations: number[] = [];
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => { durations.push(ms); return deadline.signal; });
+    const result = await completion({ model: 'test', messages: [] }, {
+      apiKey: 'test', signal: caller.signal,
+      fetcher: async (_url, init) => {
+        assert.notEqual(init!.signal, caller.signal);
+        deadline.abort(new DOMException('deadline', 'TimeoutError'));
+        assert.equal(init!.signal!.aborted, true);
+        assert.equal(init!.signal!.reason.name, 'TimeoutError');
+        assert.equal(caller.signal.aborted, false);
+        return Response.json({ choices: [] });
+      },
+    });
+    assert.deepEqual(durations, [60_000]);
+    assert.equal(result.ok, true);
+  });
+
+  it('When the caller has already cancelled Then the composed signal remains aborted', async () => {
+    const caller = new AbortController();
+    caller.abort('cancelled');
+    let observed: AbortSignal | null | undefined;
+    await completion({ model: 'test', messages: [] }, {
+      apiKey: 'test', signal: caller.signal,
+      fetcher: async (_url, init) => { observed = init!.signal; return Response.json({ choices: [] }); },
+    });
+    assert.equal(observed?.aborted, true);
+    assert.equal(observed?.reason, 'cancelled');
   });
 });

@@ -2,14 +2,32 @@ import type { CompletionGateway, CompletionMessage, CompletionOptions, Completio
 import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
 
+// Provider diagnostics are untrusted: never reuse them as a public failure reason.
+function logCompletionError(message: string, apiKey: string | undefined, status?: number) {
+  const key = apiKey?.trim();
+  const redacted = (key ? message.split(key).join('[REDACTED]') : message)
+    .replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]')
+    .replace(/\b(?:Bearer|Basic)\s+[^\s,;"']+/gi, '[REDACTED_AUTH]')
+    .replace(/\b(?:sk-|gsk_|xai-|hf_|AIza|AKIA)[a-zA-Z0-9_-]+/g, '[REDACTED_KEY]')
+    .replace(/(["']?(?:api[-_]?key|access[-_]?token|token|secret|password|authorization)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
+    .replace(/\b[a-zA-Z0-9_+\/=-]{32,}\b/g, '[REDACTED_KEY]')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .slice(0, 512);
+  try {
+    console.error({ event: 'completion_error', ...(status === undefined ? {} : { status }), message: redacted });
+  } catch {
+    // Logging must not turn a safe failure into an exception.
+  }
+}
+
 export async function completion(
   params: CompletionParams,
   options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; fetcher?: typeof fetch } = {},
 ): Promise<Result<CompletionResponse>> {
+  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   try {
-    const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey?.trim()) {
-      throw new Error('OPENAI_API_KEY is required');
+      return { ok: false, reason: '모델 API 키가 설정되지 않았습니다.' };
     }
 
     const baseUrl = (options.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
@@ -20,7 +38,9 @@ export async function completion(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ ...params, stream: false }),
-      signal: options.signal ?? AbortSignal.timeout(60_000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
+        : AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {
@@ -34,12 +54,14 @@ export async function completion(
       } catch {
         // Gateways may return HTML or plain text instead of an API error.
       }
-      throw new Error(`OpenAI API error (${response.status}): ${message}`);
+      logCompletionError(message, apiKey, response.status);
+      return { ok: false, reason: `모델 공급자 요청에 실패했습니다. (HTTP ${response.status})` };
     }
 
     return { ok: true, value: (await response.json()) as CompletionResponse };
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : '응답을 가져오지 못했습니다.' };
+    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey);
+    return { ok: false, reason: '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.' };
   }
 }
 

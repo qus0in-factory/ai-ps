@@ -6,10 +6,10 @@
 .queens-page p { margin: 16px 0; }
 .queens-note { color: #62625c; font-size: 14px; }
 .queens-page form { display: flex; align-items: center; gap: 16px; margin: 24px 0; }
-.queens-page select { padding: 8px; margin-left: 6px; border: 1px solid #b0b0a8; border-radius: 8px; background: white; font: inherit; }
+.queens-page form .select { margin-left: 6px; }
 .queens-page button { padding: 10px 18px; border: 0; border-radius: 8px; background: #292925; color: white; font: inherit; cursor: pointer; }
 .queens-page button:disabled { opacity: .4; cursor: default; }
-.queens-page button:focus-visible, .queens-page select:focus-visible { outline: 2px solid #62625c; outline-offset: 3px; }
+.queens-page button:focus-visible { outline: 2px solid #62625c; outline-offset: 3px; }
 .queens-error { color: #b13832; overflow-wrap: anywhere; }
 .queens-play { margin-top: 28px; }
 .queens-guide { color: #62625c; font-size: 14px; }
