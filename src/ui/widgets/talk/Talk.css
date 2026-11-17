@@ -65,7 +65,7 @@
 @media (max-width: 380px) {
   .talk-tutor-options { gap: 8px; }
   .talk-current-tutor { gap: 10px; }
-  .talk-current-tutor .talk-portrait { width: 96px; height: 96px; }
+  .talk-current-tutor .talk-portrait { width: 128px; height: 128px; }
 }
 
 .talk-record-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
