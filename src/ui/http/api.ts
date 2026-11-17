@@ -1,3 +1,5 @@
+import type { GameMaster } from '../../domain/adventure/types.ts';
+import { parseAdventureTurn, isAdventureStart } from '../../app/adventure/game-master.ts';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Reply } from '../../app/chat.ts';
@@ -7,6 +9,7 @@ import type { QueensGenerator } from '../../domain/queens/generation.ts';
 export interface ApiDependencies {
   reply: Reply;
   queen: QueensGenerator;
+  adventure: GameMaster;
 }
 
 type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; status: number; detail: string };
@@ -28,32 +31,63 @@ async function readJson(request: Request): Promise<{ ok: true; value: unknown } 
 // NDJSON은 첫 프레임에서 시작한다. 그 전에 끝난 실패는 일반 Problem Details 응답으로 보낸다.
 function progress(instance: string, failure: string, signal: AbortSignal, run: (frame: Frame, signal: AbortSignal) => Promise<Outcome>) {
   const abort = new AbortController();
-  signal.addEventListener('abort', () => abort.abort(), { once: true });
   return new Promise<Response>(resolve => {
     let sink: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let done = false;
+    const cleanup = () => signal.removeEventListener('abort', cancelIncoming);
+    const cancelIncoming = () => {
+      if (done) return;
+      done = true;
+      abort.abort();
+      if (sink) sink.close();
+      else resolve(problem(502, '요청이 중단되었습니다.', instance));
+      cleanup();
+    };
     const frame: Frame = value => {
-      if (abort.signal.aborted) return;
+      if (done || abort.signal.aborted) return;
+      const bytes = encoder.encode(JSON.stringify(value) + '\n');
       if (!sink) {
-        const body = new ReadableStream<Uint8Array>({ start: controller => { sink = controller; }, cancel: () => abort.abort() });
+        const body = new ReadableStream<Uint8Array>({
+          start: controller => { sink = controller; },
+          cancel: () => { done = true; abort.abort(); cleanup(); },
+        });
         resolve(new Response(body, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' } }));
       }
-      sink!.enqueue(encoder.encode(JSON.stringify(value) + '\n'));
+      sink!.enqueue(bytes);
     };
     const finish = (outcome: Outcome) => {
-      if (outcome.ok && outcome.json !== undefined && !sink) return resolve(Response.json(outcome.json, {
+      if (done) return;
+      if (outcome.ok && outcome.json !== undefined && !sink) resolve(Response.json(outcome.json, {
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
       }));
-      if (!outcome.ok && !sink) return resolve(problem(outcome.status, outcome.detail, instance));
-      frame(outcome.ok ? outcome.frame : { type: 'problem', problem: createProblem(outcome.status, outcome.detail, instance) });
-      if (!abort.signal.aborted) sink!.close();
+      else if (!outcome.ok && !sink) resolve(problem(outcome.status, outcome.detail, instance));
+      else {
+        frame(outcome.ok ? outcome.frame : { type: 'problem', problem: createProblem(outcome.status, outcome.detail, instance) });
+        sink!.close();
+      }
+      done = true;
+      cleanup();
     };
-    run(frame, abort.signal)
-      .catch((): Outcome => ({ ok: false, status: 500, detail: failure }))
-      .then(finish);
+    signal.addEventListener('abort', cancelIncoming, { once: true });
+    if (signal.aborted) { cancelIncoming(); return; }
+    const safeFailure = () => {
+      if (done) return;
+      try {
+        if (!sink) resolve(problem(500, failure, instance));
+        else sink.enqueue(encoder.encode(JSON.stringify({ type: 'problem', problem: createProblem(500, failure, instance) }) + '\n'));
+      } catch { /* The reader may already be disconnected. */ }
+      finally {
+        try { sink?.close(); } catch { /* Already closed. */ }
+        done = true;
+        abort.abort();
+        cleanup();
+      }
+    };
+    Promise.resolve().then(() => run(frame, abort.signal)).then(finish).catch(safeFailure);
   });
 }
 
-export function createApi({ reply, queen }: ApiDependencies) {
+export function createApi({ reply, queen, adventure }: ApiDependencies) {
   const api = new Hono();
   const limit = (maxSize: number, detail: string) => bodyLimit({ maxSize, onError: c => problem(413, detail, c.req.path) });
   const postOnly = (path: string) => api.all(path, () => problem(405, 'POST 요청만 가능합니다.', path, { Allow: 'POST' }));
@@ -84,6 +118,27 @@ export function createApi({ reply, queen }: ApiDependencies) {
     });
   });
   postOnly('/api/queen/generate');
+
+  api.post('/api/adventure/start', limit(1_000, '요청이 너무 큽니다.'), async c => {
+    const body = await readJson(c.req.raw);
+    if (!body.ok || !isAdventureStart(body.value)) return problem(400, '시작 요청은 빈 JSON 객체여야 합니다.', '/api/adventure/start');
+    return progress('/api/adventure/start', '모험을 시작하지 못했습니다.', c.req.raw.signal, async (frame, signal) => {
+      const result = await adventure.start(event => frame({ type: 'event', event }), signal);
+      return result.ok ? { ok: true, frame: { type: 'result', value: result.value } } : { ok: false, status: 502, detail: result.reason };
+    });
+  });
+  postOnly('/api/adventure/start');
+  api.post('/api/adventure/turn', limit(32_000, '요청이 너무 큽니다.'), async c => {
+    const body = await readJson(c.req.raw);
+    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', '/api/adventure/turn');
+    const input = parseAdventureTurn(body.value);
+    if (!input.ok) return problem(400, input.reason, '/api/adventure/turn');
+    return progress('/api/adventure/turn', '모험 요청을 처리하지 못했습니다.', c.req.raw.signal, async (frame, signal) => {
+      const result = await adventure.turn(input.value.session, input.value.action, event => frame({ type: 'event', event }), signal);
+      return result.ok ? { ok: true, frame: { type: 'result', value: result.value } } : { ok: false, status: 502, detail: result.reason };
+    });
+  });
+  postOnly('/api/adventure/turn');
 
   api.notFound(c => problem(404, '요청한 API를 찾을 수 없습니다.', c.req.path));
   api.onError((_error, c) => problem(500, '요청을 처리하지 못했습니다.', c.req.path));

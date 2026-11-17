@@ -7,7 +7,7 @@ const unusedQueen = { generate: async () => { throw new Error('Must not generate
 
 describe('Given the Hono API', () => {
   it('When an API path is unknown Then returns a 404 problem', async () => {
-    const response = await createApi({ reply: unusedReply, queen: unusedQueen }).request('/api/missing');
+    const response = await createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: unusedReply, queen: unusedQueen }).request('/api/missing');
     assert.equal(response.status, 404);
     assert.equal(response.headers.get('Content-Type'), 'application/problem+json');
     assert.equal((await response.json()).instance, '/api/missing');
@@ -16,7 +16,7 @@ describe('Given the Hono API', () => {
     let generationSignal: AbortSignal | undefined;
     let aborted!: () => void;
     const stopped = new Promise<void>(resolve => { aborted = resolve; });
-    const api = createApi({ reply: unusedReply, queen: {
+    const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: unusedReply, queen: {
       generate: async (_size, onEvent, signal) => {
         generationSignal = signal;
         onEvent?.({ kind: 'attempt', attempt: 1, retry: 0 });

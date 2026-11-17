@@ -26,6 +26,8 @@ describe('Given the Workers composition root', () => {
       method: 'POST', body: JSON.stringify({ size: 2 }),
     }), env);
     assert.equal(invalid.status, 400);
+    const adventure = await worker.fetch(new Request('https://ai-ps.test/api/adventure/turn', { method: 'POST', body: '{}' }), env);
+    assert.equal(adventure.status, 400);
     const missing = await worker.fetch(new Request('https://ai-ps.test/api/unknown'), env);
     assert.equal(missing.status, 404);
     assert.match(missing.headers.get('Content-Type')!, /application\/problem\+json/);

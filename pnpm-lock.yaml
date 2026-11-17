@@ -14,6 +14,9 @@ importers:
       '@solidjs/router':
         specifier: ^1.0.3
         version: 1.0.3(solid-js@1.9.19)
+      '@tanstack/solid-query':
+        specifier: ^5.107.1
+        version: 5.107.1(solid-js@1.9.19)
       dompurify:
         specifier: ^3.4.18
         version: 3.4.18
@@ -32,6 +35,9 @@ importers:
       solid-js:
         specifier: ^1.9.19
         version: 1.9.19
+      zustand:
+        specifier: ^5.1.0
+        version: 5.1.0
     devDependencies:
       '@babel/parser':
         specifier: ^8.1.2
@@ -709,6 +715,14 @@ packages:
 
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
+
+  '@tanstack/query-core@5.107.1':
+    resolution: {integrity: sha512-PSyAik11oQBEVOiVy5hjZWHmoUqOXqK1WYy4v55mcxozEfKaQgpUMsgnXhWjuESzSht8JfzqMS1m6M/9CpNgvg==}
+
+  '@tanstack/solid-query@5.107.1':
+    resolution: {integrity: sha512-ZqwDSKk/DtKblv+09XUgrbHENvTzZvyEQK5E19j8QTrjcW2jw+bLitLdtfayC83rWNMQvkzsCqGnOj+SWnBD2w==}
+    peerDependencies:
+      solid-js: ^1.6.0
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -1476,6 +1490,24 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
+  zustand@5.1.0:
+    resolution: {integrity: sha512-ciJZlP48M1PTQbVQq81CGVFxHTLpZNrFjKqwjtCU34AWuXTZT/jrF3p9+fI84Cf1eSCMLapxqBy/SNTfwOBuqA==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
+
 snapshots:
 
   '@babel/code-frame@7.29.7':
@@ -1948,6 +1980,13 @@ snapshots:
       solid-js: 1.9.19
 
   '@speed-highlight/core@1.2.24': {}
+
+  '@tanstack/query-core@5.107.1': {}
+
+  '@tanstack/solid-query@5.107.1(solid-js@1.9.19)':
+    dependencies:
+      '@tanstack/query-core': 5.107.1
+      solid-js: 1.9.19
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
@@ -2666,3 +2705,5 @@ snapshots:
       '@speed-highlight/core': 1.2.24
       cookie: 1.1.1
       youch-core: 0.3.3
+
+  zustand@5.1.0: {}

@@ -3,7 +3,7 @@ import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
 
 // Provider diagnostics are untrusted: never reuse them as a public failure reason.
-function logCompletionError(message: string, apiKey: string | undefined, status?: number) {
+function logCompletionError(message: string, apiKey: string | undefined, status?: number, debug = false) {
   const key = apiKey?.trim();
   const redacted = (key ? message.split(key).join('[REDACTED]') : message)
     .replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]')
@@ -14,7 +14,9 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .slice(0, 512);
   try {
-    console.error({ event: 'completion_error', ...(status === undefined ? {} : { status }), message: redacted });
+    const entry = { event: 'completion_error', code: status === undefined ? 'provider_connection_error' : 'provider_http_error', ...(status === undefined ? {} : { status }) };
+    console.error(entry);
+    if (debug) console.debug({ ...entry, message: redacted });
   } catch {
     // Logging must not turn a safe failure into an exception.
   }
@@ -22,7 +24,7 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
 
 export async function completion(
   params: CompletionParams,
-  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; fetcher?: typeof fetch } = {},
+  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; fetcher?: typeof fetch; debugErrors?: boolean } = {},
 ): Promise<Result<CompletionResponse>> {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   try {
@@ -54,19 +56,19 @@ export async function completion(
       } catch {
         // Gateways may return HTML or plain text instead of an API error.
       }
-      logCompletionError(message, apiKey, response.status);
+      logCompletionError(message, apiKey, response.status, options.debugErrors === true);
       return { ok: false, reason: `모델 공급자 요청에 실패했습니다. (HTTP ${response.status})` };
     }
 
     return { ok: true, value: (await response.json()) as CompletionResponse };
   } catch (error) {
-    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey);
+    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey, undefined, options.debugErrors === true);
     return { ok: false, reason: '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.' };
   }
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch },
+  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
@@ -80,13 +82,14 @@ export function createOpenAICompletion(
       }));
       const result = await completion({
         model, messages,
+        ...(settings.max_completion_tokens !== undefined ? { max_completion_tokens: settings.max_completion_tokens } : {}),
         ...(responseFormat ? { response_format: responseFormat } : {}),
         ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
-        ...(settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),
-        ...(settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
+        ...(functions.length && settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),
+        ...(functions.length && settings.parallel_tool_calls !== undefined ? { parallel_tool_calls: settings.parallel_tool_calls } : {}),
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
       }, {
-        apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal,
+        debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal,
       });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;

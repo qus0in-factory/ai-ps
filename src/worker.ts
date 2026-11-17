@@ -1,3 +1,5 @@
+import { createGameMaster } from './app/adventure/game-master.ts';
+import { createAdventureLogger } from './infra/adventure-logger.ts';
 import { createReply } from './app/chat.ts';
 import { createQueensService } from './app/queens/service.ts';
 import { createQueensGenerator } from './app/queens/generator.ts';
@@ -19,6 +21,7 @@ export interface Env {
   OPENAI_BASE_URL?: string;
   OWM_API_KEY?: string;
   LOG_LEVEL?: string;
+  ADVENTURE_TEMPERATURE?: string;
 }
 
 export default {
@@ -33,7 +36,8 @@ export default {
     const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
     return createApi({
       reply: createReply(createGateway(model, tools, createToolLogger(logger))),
-      queen: createQueensGenerator(model, { log: createQueensLogger(logger) }),
+      adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
+    queen: createQueensGenerator(model, { log: createQueensLogger(logger) }),
     }).fetch(request);
   },
 };

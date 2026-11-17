@@ -1,0 +1,61 @@
+{
+  "api": {
+    "keyEnv": "OPENAI_API_KEY",
+    "baseUrlEnv": "OPENAI_IMAGE_BASE_URL",
+    "defaultBaseUrl": "https://api.openai.com/v1",
+    "size": "1024x1024",
+    "model": "gpt-image-2.6-flare"
+  },
+  "promptPrefix": "8-bit pixel art sprite, strict 16-color palette, hard pixel edges, no anti-aliasing, no gradients, no text, no watermark, centered subject filling 80% of the frame, plain solid #FF00FF background.",
+  "character": "young lighthouse keeper apprentice, short dark hair under a grey knit cap, yellow oilskin coat, freckles, calm expression",
+  "assets": [
+    {
+      "name": "portrait-ok",
+      "purpose": "평상시 초상",
+      "subject": "young lighthouse keeper apprentice, short dark hair under a grey knit cap, yellow oilskin coat, freckles, calm expression",
+      "final": 64
+    },
+    {
+      "name": "portrait-hurt",
+      "purpose": "체력 낮음",
+      "subject": "young lighthouse keeper apprentice, short dark hair under a grey knit cap, yellow oilskin coat, freckles, tired strained expression, pale face. Keep the exact same character, outfit and framing as the reference; background must be flat solid magenta #FF00FF, no vignette, no scenery",
+      "final": 64
+    },
+    {
+      "name": "portrait-cold",
+      "purpose": "온기·집중 낮음",
+      "subject": "young lighthouse keeper apprentice, short dark hair under a grey knit cap, yellow oilskin coat, freckles, shivering distant expression, blue-tinted face. Keep the exact same character, outfit and framing as the reference; background must be flat solid magenta #FF00FF, no vignette, no scenery",
+      "final": 64
+    },
+    {
+      "name": "icon-lens",
+      "purpose": "수리 부품: 예비 렌즈",
+      "subject": "round spare glass lens for a lighthouse, simple icon",
+      "final": 32
+    },
+    {
+      "name": "icon-clockwork",
+      "purpose": "수리 부품: 회전 태엽",
+      "subject": "clockwork gear mechanism for a lighthouse, simple icon",
+      "final": 32
+    },
+    {
+      "name": "icon-oil",
+      "purpose": "수리 부품: 등유",
+      "subject": "oil lamp canister for a lighthouse, simple icon",
+      "final": 32
+    },
+    {
+      "name": "lighthouse-dark",
+      "purpose": "헤더·missed 엔딩",
+      "subject": "lighthouse with its lamp unlit on a stormy night, simple emblem",
+      "final": 96
+    },
+    {
+      "name": "lighthouse-lit",
+      "purpose": "헤더(클리어)·cleared 엔딩·파비콘 원본",
+      "subject": "lighthouse with its lamp lit, warm amber beam over dark sea, simple emblem",
+      "final": 96
+    }
+  ]
+}

@@ -163,9 +163,11 @@ describe('Given untrusted completion provider failures', () => {
       }
       const diagnostic = logs.find(entry => (entry as { event?: string }).event === 'completion_error') as { message: string; status?: number } | undefined;
       assert.ok(diagnostic, 'must record a sanitized provider diagnostic');
-      assert.ok(diagnostic.message.length <= 512);
+      assert.equal(diagnostic.message, undefined);
+      assert.ok(!serialized.includes('provider diagnostic'));
+      assert.equal(typeof (diagnostic as unknown as { code: unknown }).code, 'string');
       assert.ok(!result.reason.includes('provider diagnostic'));
-      if (kind !== 'text') assert.match(diagnostic.message, /provider diagnostic/);
+
     });
   }
 });
@@ -202,4 +204,45 @@ describe('Given a completion caller cancellation signal', () => {
     assert.equal(observed?.aborted, true);
     assert.equal(observed?.reason, 'cancelled');
   });
+});
+
+
+describe('Given completion output and diagnostic budgets', () => {
+  it('When an output token limit is requested Then forwards it to the provider', async () => {
+    let limit: unknown;
+    const model = createOpenAICompletion({ model: 'test', apiKey: 'test', fetcher: async (_url, init) => {
+      limit = JSON.parse(String(init?.body)).max_completion_tokens;
+      return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+    } });
+    await model.complete([], [], { max_completion_tokens: 1600 });
+    assert.equal(limit, 1600);
+  });
+  it('When debug diagnostics are explicitly enabled Then only debug receives a redacted bounded message', async t => {
+    const errors: unknown[] = [], debug: unknown[] = [];
+    t.mock.method(console, 'error', (entry: unknown) => errors.push(entry));
+    t.mock.method(console, 'debug', (entry: unknown) => debug.push(entry));
+    const model = createOpenAICompletion({ model: 'test', apiKey: 'sk-private-secret', debugErrors: true, fetcher: async () => Response.json({ error: { message: 'private user phrase sk-private-secret ' + 'x'.repeat(2000) } }, { status: 400 }) });
+    await model.complete([]);
+    assert.ok(!JSON.stringify(errors).includes('private user phrase'));
+    assert.ok(JSON.stringify(debug).includes('private user phrase'));
+    assert.ok(!JSON.stringify(debug).includes('sk-private-secret'));
+    assert.ok((debug[0] as { message: string }).message.length <= 512);
+  });
+});
+
+describe('Given tool-specific completion options without tools', () => {
+  for (const nativeSignature of [false, true]) {
+    it(`When tool options are supplied using ${nativeSignature ? 'native' : 'plain'} options Then strips them from the request body`, async () => {
+      let body: Record<string, unknown> = {};
+      const model = createOpenAICompletion({ model: 'test', apiKey: 'test', fetcher: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+      } });
+      const options = { response_format: { type: 'json_object' as const }, parallel_tool_calls: false, tool_choice: { type: 'function' as const, function: { name: 'roll_dice' } } };
+      const result = nativeSignature ? await model.complete([], [], options) : await model.complete([], options);
+      assert.equal(result.ok, true);
+      for (const key of ['tools', 'tool_choice', 'parallel_tool_calls']) assert.equal(Object.hasOwn(body, key), false);
+      assert.deepEqual(body.response_format, { type: 'json_object' });
+    });
+  }
 });

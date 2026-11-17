@@ -1,0 +1,14 @@
+.asset { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.asset img { width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain; }
+.asset--fallback { background: #2b3a4a; border: 2px solid #141c24; border-radius: 4px; }
+.asset__fallback { color: #e9e3d0; font-size: 10px; letter-spacing: -0.02em; }
+
+.pixel-bar { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.pixel-bar__label { color: #c9d2da; min-width: 28px; }
+.pixel-bar__track { display: inline-flex; gap: 2px; }
+.pixel-bar__cell { width: 8px; height: 13px; background: #33404f; border: 1px solid #7d8ea3; border-radius: 1px; }
+.pixel-bar__cell--on { border-color: #101820; }
+.pixel-bar__value { min-width: 22px; text-align: right; color: #f3eee0; font-variant-numeric: tabular-nums; }
+.pixel-bar--health .pixel-bar__cell--on { background: #ff8a80; }
+.pixel-bar--warmth .pixel-bar__cell--on { background: #ffc266; }
+.pixel-bar--focus .pixel-bar__cell--on { background: #8ec5ff; }

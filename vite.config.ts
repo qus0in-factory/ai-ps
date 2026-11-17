@@ -1,3 +1,5 @@
+import { createGameMaster } from './src/app/adventure/game-master.ts';
+import { createAdventureLogger } from './src/infra/adventure-logger.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, loadEnv } from 'vite';
 import solid from 'vite-plugin-solid';
@@ -16,7 +18,7 @@ import { createOpenAICompletion } from './src/infra/openai.ts';
 import { createApi } from './src/ui/http/api.ts';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_']);
+  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_']);
   const logger = createLogger({ level: env.LOG_LEVEL });
   const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
     : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
@@ -24,6 +26,7 @@ export default defineConfig(({ mode }) => {
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
   const listener = getRequestListener(createApi({
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),
+    adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queen: createQueensGenerator(model, { log: createQueensLogger(logger) }),
   }).fetch);
   const api = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
