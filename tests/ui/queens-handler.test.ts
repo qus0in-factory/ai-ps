@@ -22,11 +22,11 @@ describe('Given the Queens generation endpoint', () => {
     }
     assert.equal((await request('{}', generator, 'GET')).status, 405);
   });
-  it('When retries fail Then streams progress and a terminal Problem Details frame', async () => {
+  it('When work bounds are exhausted Then streams progress and a terminal Problem Details frame', async () => {
     const result = await request('{"size":5}', { generate: async (size, onEvent, signal) => {
       assert.equal(size, 5); assert.ok(signal instanceof AbortSignal);
-      onEvent?.({ kind: 'attempt', attempt: 1, retry: 0 });
-      return { ok: false, reason: '재시도 한도에 도달했습니다.' };
+      onEvent?.({ kind: 'placement', attempt: 1 });
+      return { ok: false, reason: '알고리즘 작업 한도에 도달했습니다.' };
     } });
     const frames = result.payload.trim().split('\n').map(line => JSON.parse(line));
     assert.equal(frames[0].type, 'event');

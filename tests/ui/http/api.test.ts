@@ -31,7 +31,7 @@ describe('Given the Hono API', () => {
     const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: unusedReply, queens: {
       generate: async (_size, onEvent, signal) => {
         generationSignal = signal;
-        onEvent?.({ kind: 'attempt', attempt: 1, retry: 0 });
+        onEvent?.({ kind: 'placement', attempt: 1 });
         await new Promise<void>(resolve => signal!.addEventListener('abort', () => { aborted(); resolve(); }, { once: true }));
         return { ok: false, reason: '중단됨' };
       },

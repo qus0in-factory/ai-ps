@@ -7,7 +7,7 @@ function environment(): Env {
 }
 
 describe('Given the Workers composition root', () => {
-  it('When Queens, chat and adventure call the model Then enables high reasoning only for Queens design', async t => {
+  it('When Queens, chat and adventure call the model Then uses one none-reasoning diversity call only for Queens', async t => {
     const requests: Record<string, unknown>[] = [];
     t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       requests.push(JSON.parse(String(init?.body)));
@@ -22,8 +22,8 @@ describe('Given the Workers composition root', () => {
       const response = await worker.fetch(new Request(`https://ai-ps.test${path}`, { method: 'POST', body: JSON.stringify(body) }), env);
       await response.text();
     }
-    assert.equal(requests.length, 4);
-    assert.deepEqual(requests.map(body => body.reasoning_effort), ['high', 'high', undefined, undefined]);
+    assert.equal(requests.length, 3);
+    assert.deepEqual(requests.map(body => body.reasoning_effort), ['none', undefined, undefined]);
     assert.ok(requests.every(body => body.model === 'test-model'));
     assert.deepEqual(requests[0]!.response_format, { type: 'json_object' });
     assert.equal('temperature' in requests[0]!, false);

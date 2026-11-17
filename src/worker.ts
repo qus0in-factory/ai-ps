@@ -34,7 +34,7 @@ export default {
       model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
     };
     const model = createOpenAICompletion(modelConfig);
-    const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'high' });
+    const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
     const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
     return createApi({
       reply: createReply(createGateway(model, tools, createToolLogger(logger))),

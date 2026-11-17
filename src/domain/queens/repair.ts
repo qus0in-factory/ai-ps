@@ -236,12 +236,46 @@ export function breakAlternatives(
  */
 export function growRegionsFromSolution(size: number, solution: QueensSolution, random: () => number): Grid {
   const grid: Grid = Array.from({ length: size }, () => Array.from({ length: size }, () => -1 as RegionId));
-  const frontier: Cell[] = [];
+  solution.forEach((queen, index) => { grid[queen.row]![queen.column] = index; });
+  return fillRegions(grid, solution, random);
+}
+
+/** Retain a random connected patch near each queen before filling the remaining cells. */
+export function growRegionsFromProposal(proposal: Grid, solution: QueensSolution, random: () => number): { regions: Grid; retainedCells: number } {
+  const size = proposal.length;
+  const grid: Grid = Array.from({ length: size }, () => Array<RegionId>(size).fill(-1));
+  solution.forEach((queen, index) => { grid[queen.row]![queen.column] = index; });
+  const sizes = counts(proposal);
+  let retainedCells = 0;
   solution.forEach((queen, index) => {
-    grid[queen.row]![queen.column] = index;
-    frontier.push({ row: queen.row, column: queen.column });
+    const label = proposal[queen.row]![queen.column]!;
+    const target = Math.max(1, Math.floor(((sizes.get(label) ?? 1) - 1) * (0.1 + random() * 0.5)));
+    const frontier: Cell[] = [queen];
+    let kept = 0;
+    while (frontier.length && kept < target) {
+      const pick = Math.floor(random() * frontier.length);
+      const from = frontier[pick]!;
+      const options = neighbours(size, from.row, from.column).filter(next =>
+        grid[next.row]![next.column] === -1 && proposal[next.row]![next.column] === label);
+      if (!options.length) { frontier.splice(pick, 1); continue; }
+      const next = options[Math.floor(random() * options.length)]!;
+      grid[next.row]![next.column] = index;
+      frontier.push(next);
+      kept++; retainedCells++;
+    }
   });
-  let remaining = size * size - frontier.length;
+  return { regions: fillRegions(grid, solution, random), retainedCells };
+}
+
+function fillRegions(grid: Grid, solution: QueensSolution, random: () => number): Grid {
+  const size = grid.length;
+  const frontier: Cell[] = solution.map(queen => ({ ...queen }));
+  const anchors = queenKeys(size, solution);
+  let remaining = 0;
+  for (let row = 0; row < size; row++) for (let column = 0; column < size; column++) {
+    if (grid[row]![column] === -1) remaining++;
+    else if (!anchors.has(row * size + column)) frontier.push({ row, column });
+  }
   while (remaining > 0) {
     if (!frontier.length) break;
     const pick = Math.floor(random() * frontier.length);

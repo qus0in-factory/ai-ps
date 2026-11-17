@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
     : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
   const modelConfig = { model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL };
   const model = createOpenAICompletion(modelConfig);
-  const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'high' });
+  const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
   const listener = getRequestListener(createApi({
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),

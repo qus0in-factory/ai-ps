@@ -1,13 +1,11 @@
 import type { Result } from '../chat.ts';
-import type { GeneratedPuzzle, PuzzleValidation, QueensSolution } from './types.ts';
+import type { GeneratedPuzzle } from './types.ts';
 
-export const MAX_QUEENS_RETRIES = 1;
+export type GenerationPath = 'model' | 'model-seed' | 'algorithm';
+
 export type GenerationEvent =
-  | { kind: 'placement'; attempt: number; solution: QueensSolution }
-  | { kind: 'attempt'; attempt: number; retry: number }
-  | { kind: 'candidate'; attempt: number; regions: unknown }
-  | { kind: 'validation'; attempt: number; report: PuzzleValidation }
-  | { kind: 'feedback'; attempt: number; message: string }
+  | { kind: 'placement'; attempt: number }
+  | { kind: 'model'; attempt: number; path: GenerationPath; reason?: string }
   | { kind: 'repair'; attempt: number; message: string }
   | { kind: 'complete'; attempt: number }
   | { kind: 'stopped'; attempt: number; reason: string };
@@ -23,22 +21,11 @@ export interface GenerationState {
   error: string;
 }
 
-export function isPuzzleValidation(value: unknown): value is PuzzleValidation {
-  if (!value || typeof value !== 'object') return false;
-  const report = value as Partial<PuzzleValidation>;
-  return typeof report.valid === 'boolean' && Array.isArray(report.issues) &&
-    report.issues.every(issue => issue && typeof issue.code === 'string' && typeof issue.message === 'string') &&
-    ['invalid','none','unique','multiple','inconclusive'].includes(report.solutionStatus ?? '') &&
-    Array.isArray(report.solutions) && typeof report.nodesVisited === 'number';
-}
 export function isGenerationEvent(value: unknown): value is GenerationEvent {
-  if (!value || typeof value !== 'object' || !('kind' in value) || !('attempt' in value) ||
-      !Number.isInteger(value.attempt) || Number(value.attempt) < 1 || Number(value.attempt) > MAX_QUEENS_RETRIES + 1) return false;
-  if (value.kind === 'attempt') return 'retry' in value && value.retry === Number(value.attempt) - 1;
-  if (value.kind === 'placement') return 'solution' in value && Array.isArray(value.solution);
-  if (value.kind === 'candidate') return 'regions' in value;
-  if (value.kind === 'validation') return 'report' in value && isPuzzleValidation(value.report);
-  if (value.kind === 'feedback' || value.kind === 'repair') return 'message' in value && typeof value.message === 'string';
+  if (!value || typeof value !== 'object' || !('kind' in value) || !('attempt' in value) || value.attempt !== 1) return false;
+  if (value.kind === 'model') return 'path' in value && typeof value.path === 'string' && ['model', 'model-seed', 'algorithm'].includes(value.path) &&
+    (value.path !== 'algorithm' || ('reason' in value && typeof value.reason === 'string'));
+  if (value.kind === 'repair') return 'message' in value && typeof value.message === 'string';
   if (value.kind === 'stopped') return 'reason' in value && typeof value.reason === 'string';
-  return value.kind === 'complete';
+  return value.kind === 'placement' || value.kind === 'complete';
 }

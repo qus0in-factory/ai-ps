@@ -111,7 +111,7 @@ describe('Given an OpenAI-compatible completion endpoint', () => {
 });
 
 describe('Given a JSON-mode completion without tools', () => {
-  for (const reasoningEffort of ['medium', 'high'] as const) {
+  for (const reasoningEffort of ['none', 'low', 'medium', 'high'] as const) {
     it(`When a Queens-only gateway configures ${reasoningEffort} Then sends that reasoning effort without temperature or tool options`, async () => {
       let body: Record<string, unknown> = {};
       const model = createOpenAICompletion({ model: 'test', apiKey: 'test', reasoningEffort, fetcher: async (_url, init) => {

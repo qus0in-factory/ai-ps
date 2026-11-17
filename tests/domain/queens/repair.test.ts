@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { breakAlternatives, growRegionsFromSolution, growSmallRegions, repairDisconnected } from '../../../src/domain/queens/repair.ts';
+import { breakAlternatives, growRegionsFromProposal, growRegionsFromSolution, growSmallRegions, repairDisconnected } from '../../../src/domain/queens/repair.ts';
 import { validateGrid } from '../../../src/domain/queens/grid.ts';
 import { solveQueens } from '../../../src/domain/queens/solver.ts';
 import { createRandomSolution } from '../../../src/domain/queens/random-solution.ts';
@@ -26,6 +26,32 @@ const twoCellCount = (grid: RegionId[][]) => sizes(grid).filter((count) => count
 const queensKept = (grid: RegionId[][], solution: QueensSolution) =>
   solution.every((queen, index) => grid[queen.row]![queen.column] === index);
 const validGrid = (grid: RegionId[][]) => validateGrid({ size: grid.length, regions: grid }).valid;
+
+describe('Given a model layout used as a partial seed', () => {
+  const fixed = [0, 2, 4, 1, 3].map((column, row) => ({ row, column }));
+  const horizontal = Array.from({ length: 5 }, (_, row) => Array(5).fill(row));
+  const vertical = Array.from({ length: 5 }, () => [0, 1, 2, 3, 4]);
+  it('When regrown Then retains nonqueen model cells, preserves anchors, and does not mutate the proposal', () => {
+    const before = structuredClone(horizontal);
+    const result = growRegionsFromProposal(horizontal, fixed, seeded(42));
+    assert.ok(result.retainedCells > 0);
+    assert.equal(validGrid(result.regions), true);
+    assert.equal(queensKept(result.regions, fixed), true);
+    assert.deepEqual(horizontal, before);
+  });
+  it('When the model layout changes with the same random stream Then the grown layout changes', () => {
+    const first = growRegionsFromProposal(horizontal, fixed, seeded(42));
+    const second = growRegionsFromProposal(vertical, fixed, seeded(42));
+    assert.ok(first.retainedCells > 0 && second.retainedCells > 0);
+    assert.notDeepEqual(first.regions, second.regions);
+  });
+  it('When no same-region neighbour exists Then reports zero retained cells instead of claiming model influence', () => {
+    const isolated = Array.from({ length: 5 }, (_, row) => Array.from({ length: 5 }, (_, column) => (row + column) % 2));
+    const result = growRegionsFromProposal(isolated, fixed, seeded(42));
+    assert.equal(result.retainedCells, 0);
+    assert.equal(validGrid(result.regions), true);
+  });
+});
 
 describe('Given a region split into detached pieces', () => {
   const disconnected = [[0, 1, 1, 1], [1, 1, 2, 2], [0, 1, 2, 2], [3, 3, 3, 3]];

@@ -71,7 +71,7 @@ export async function completion(
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; reasoningEffort?: 'medium' | 'high' },
+  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {

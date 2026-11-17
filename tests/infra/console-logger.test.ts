@@ -13,6 +13,11 @@ function capture(level?: string) {
 }
 
 describe('Given a Workers console logger', () => {
+  it('When Queens logs summaries Then excludes queen coordinates even from an obsolete payload', () => {
+    const { logger, entries } = capture();
+    createQueensLogger(logger)({ kind: 'placement', attempt: 1, solution: [{ row: 0, column: 2 }] } as never);
+    assert.doesNotMatch(JSON.stringify(entries), /"solution"|"row"|"column"/);
+  });
   it('When tool and generation events arrive Then preserves structured fields and severity', () => {
     const { logger, entries } = capture();
     const tools = createToolLogger(logger);
