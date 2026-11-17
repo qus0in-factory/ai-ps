@@ -25,7 +25,7 @@ export async function release(args, { cwd = ROOT, execute = command, print = con
   };
   await check();
   if (dry) {
-    for (const step of ['test', 'typecheck', 'build']) print(`PLAN pnpm ${STORE} ${step}`);
+    for (const step of ['test', 'typecheck', 'build', 'og:check']) print(`PLAN pnpm ${STORE} ${step}`);
     print(`PLAN check local and remote tag ${version}; recheck worktree and HEAD`);
     print(`PLAN git tag ${version} (HEAD ${head})`);
     print(`PLAN git push --atomic origin ${branch} ${version}; remove local tag on push failure`);
@@ -36,6 +36,8 @@ export async function release(args, { cwd = ROOT, execute = command, print = con
     await run(step, 'pnpm', [STORE, step]);
     print(`PASS ${step}`);
   }
+  await run('og:check', 'pnpm', [STORE, 'og:check']);
+  print('PASS og:check');
   if ((await run('tag', 'git', ['tag', '--list', version])).trim()) fail('tag', 'already exists locally');
   if ((await run('tag', 'git', ['ls-remote', '--tags', 'origin', `refs/tags/${version}`])).trim()) fail('tag', 'already exists remotely');
   await check();

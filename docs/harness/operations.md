@@ -23,6 +23,7 @@
 ## 릴리스
 - 기본은 빠른 경로다. `pnpm test`는 `tests/**/*.test.ts`만 실행한다. 느리거나 복잡한 검증은 `*.slow.ts`로 분리하며, `pnpm test:slow`·`pnpm smoke <url> --llm`·`bash tests/scripts/herdr/run.sh`·실모델 검증은 요청 시에만 실행한다. 기본 CI·릴리스·배포에 이 특수 검증을 추가하지 않는다.
 - `pnpm release <버전>`(`scripts/release.mjs`). 작업 트리 확인 → 빠른 test·typecheck·build → 태그 중복 확인 → HEAD에 태그 → `git push --atomic origin <branch> <버전>` → `git ls-remote --tags`로 확인. 커밋은 스크립트가 하지 않고, 미추적 `docs/retro/`만 경고로 허용한다.
+- 새 라우트·기능을 추가하면 `scripts/og.json`에 항목을 추가한 뒤 `pnpm og`로 `public/og-image.png`와 `index.html` OG 구간을 갱신하고 커밋한다. 릴리스는 낡은 OG를 `og:check`로 막는다. 카카오 공유 캐시는 OG 변경 후 https://developers.kakao.com/tool/clear/og 에서 초기화한다. Pillow는 시스템/venv에 설치해야 한다(`python3 -I`로 user site가 비활성화됨).
 - 계획 확인은 `node scripts/release.mjs <버전> --dry-run`으로 한다(태그·푸시 없음).
 - 릴리스 직후 소스를 바꾸지 않고 배포할 때는 `pnpm run deploy --skip-build`로 방금 만든 `dist`를 재사용한다. `dist/index.html`이 없으면 실패한다. 독립 배포는 기본 build를 한 번 수행한다.
 - 중간에 끼어든 작은 요청은 별도 버전으로 먼저 커밋·태그해 순서를 유지한다.

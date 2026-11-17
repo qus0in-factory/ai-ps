@@ -4,3 +4,4 @@ dist
 .wrangler
 .pnpm-store
 tmp
+__pycache__/
