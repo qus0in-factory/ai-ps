@@ -28,20 +28,25 @@ name 은 소문자·숫자·하이픈만, model·effort 는 영문·숫자·._:/
   --provider '<문구>'        opencode 모델 목록에서 고를 공급자 줄(예: "Ollama Cloud")
   --model-label '<문구>'     화면에 보이는 모델 표기(기본: model). slug와 표기가 다를 때 준다
   --search '<문구>'          opencode 모델 검색창에 입력할 문자열(기본: model)
+  --keep-model               opencode 의 /models 선택을 건너뛰고 기본 모델(예: Beam Free)을 유지한다.
+                             이때 effort·--provider 는 설정이 아니라 현재 상태가 일치하는지 확인하는 조건이며
+                             (예: '... high --keep-model' 은 high 로 바꾸라는 뜻이 아니라 지금 high 인지 확인),
+                             --search 는 쓰지 않는다.
   --role '<문구>'            claude --append-system-prompt 로 넘길 역할 설명
   --cwd <경로>               패널 작업 디렉터리(기본: git 최상위)
-  --expect '<문자열>'        상태줄 검증에 쓸 문자열(기본: model)
+  --expect '<문자열>'        상태줄 검증 문자열(기본값 순서: --expect > --model-label > model)
   --dry-run                  실행할 명령·키 순서만 출력한다
   --help
 
 예:
   scripts/herdr-open-worker.sh ps-ds opencode 'deepseek-v4.1-flash:1017' high --provider 'Ollama Cloud' --dry-run
   scripts/herdr-open-worker.sh ps-sol codex gpt-6.1-sol high
+  scripts/herdr-open-worker.sh ps-beam opencode 'beam-free' --keep-model --model-label 'Beam Free'
 USAGE
 }
 
 name=""; agent=""; model=""; effort=""
-split_of=""; direction="down"; provider=""; role=""; cwd=""; expect=""; search=""; model_label=""
+split_of=""; direction="down"; provider=""; role=""; cwd=""; expect=""; search=""; model_label=""; keep_model=""
 pos=0
 
 while [ $# -gt 0 ]; do
@@ -56,6 +61,7 @@ while [ $# -gt 0 ]; do
     --expect) [ $# -ge 2 ] || herdr_die "--expect 값이 필요합니다."; expect=$2; shift 2 ;;
     --search) [ $# -ge 2 ] || herdr_die "--search 값이 필요합니다."; search=$2; shift 2 ;;
     --model-label) [ $# -ge 2 ] || herdr_die "--model-label 값이 필요합니다."; model_label=$2; shift 2 ;;
+    --keep-model) keep_model=1; shift ;;
     -*) herdr_die "알 수 없는 옵션: $1" ;;
     *)
       pos=$((pos + 1))
@@ -74,6 +80,9 @@ done
 [ -n "$name" ] && [ -n "$agent" ] && [ -n "$model" ] || { usage >&2; exit 64; }
 case "$agent" in codex|claude|opencode) ;; *) herdr_die "에이전트는 codex|claude|opencode 중 하나입니다." ;; esac
 case "$direction" in right|down) ;; *) herdr_die "--direction 은 right|down 입니다." ;; esac
+if [ -n "$keep_model" ] && [ "$agent" != "opencode" ]; then
+  herdr_die "--keep-model 은 opencode 전용입니다."
+fi
 
 # B1: 대상 셸에 들어가는 값은 형태를 먼저 제한한다.
 case "$name" in
@@ -91,7 +100,7 @@ fi
 # codex·claude 는 effort 인자가 필수에 가깝다. opencode 는 variant 목록이 있을 때만 쓴다.
 if [ -z "$effort" ] && [ "$agent" != "opencode" ]; then effort=high; fi
 cwd=${cwd:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
-expect=${expect:-$model}
+expect=${expect:-${model_label:-$model}}
 case "$expect" in */*) expect=${expect##*/} ;; esac
 case "$expect" in *:*) expect=${expect%%:*} ;; esac
 
@@ -139,7 +148,13 @@ herdr_wait_echo "$pane" "$launch" || herdr_die "CLI 실행 문자열이 화면�
 herdr_enter "$pane"
 
 # 3) opencode 는 -m 옵션이 없다(P2). TUI 메뉴는 제목+커서를 확인한 뒤에만 조작한다(B2).
-if [ "$agent" = "opencode" ]; then
+#    --keep-model 은 메뉴를 열지 않고 기본 모델을 유지한 채 상태줄 확인만 한다.
+if [ "$agent" = "opencode" ] && [ -n "$keep_model" ]; then
+  if herdr_is_dry; then
+    printf '[dry-run] keep-model: /models 메뉴 건너뜀, 상태줄에서 "%s"만 확인\n' "$expect"
+  fi
+  herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 30 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
+elif [ "$agent" = "opencode" ]; then
   herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 30 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
   herdr_send_text "$pane" "/models"
   herdr_wait_echo "$pane" "/models" || herdr_die "OpenCode 에 '/models' 입력이 반영되지 않았습니다."
