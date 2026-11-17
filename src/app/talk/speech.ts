@@ -1,5 +1,6 @@
 import type { Result } from '../../domain/chat.ts';
 import { MAX_TTS_TEXT_LENGTH } from '../../domain/talk/speech-cache.ts';
+export { MAX_TTS_TEXT_LENGTH };
 
 export function parseSpeechRequest(body: unknown): Result<string> {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 ||

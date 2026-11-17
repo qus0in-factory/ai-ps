@@ -33,7 +33,10 @@
 - `pnpm run deploy`(`scripts/deploy.mjs`)가 build 1회 → 앱 키 secret 동기화 → `wrangler deploy` → URL·Version 파싱 → GET 스모크까지 이어 한다. 수동 `wrangler secret bulk`는 쓰지 않는다. `--skip-build`·`--skip-secrets`·`--dry-run` 지원. 첫 배포(Worker 미존재)로 `wrangler secret list`가 실패하면 원격 키 비교만 건너뛴다.
 - secret은 `.env`의 앱 키만 올린다: `OPENAI_API_KEY`·`OPENAI_MODEL`·`OPENAI_TOOL_MODE`·`OWM_API_KEY`, 있으면 `OPENAI_BASE_URL`·`LOG_LEVEL`. `DISCORD_WEBHOOK_URL`은 올리지 않고, 값은 출력하지 않는다. JSON은 stdin으로 전달하며 임시 secret 파일은 만들지 않는다.
 - 기본 스모크(`pnpm smoke <url>`, URL 생략 시 운영 URL)는 `/`·`/queens`·`/chat`의 GET 200만 확인한다. 요청받았을 때만 `pnpm smoke <url> --llm`으로 `POST /api/chat`의 `content` 포함 JSON을 추가 확인한다. 이 POST는 실제 LLM 호출이라 비용·로그가 발생한다. 응답 본문은 길이·존재 여부만 출력한다.
-- 공개 URL에는 현재 인증·rate limit이 없다(2026-11-17). 변경 시 이 줄을 갱신한다.
+- 공개 URL에 인증은 없다. `/api/talk/*` 네 경로는 Workers Rate Limiting 바인딩으로 제한한다: `TALK_AUDIO_LIMIT`은 speech·transcribe 합산 IP당 10회/60초(namespace `2061088357`), `TALK_TURN_LIMIT`은 turn·report 합산 20회/60초(namespace `3990254962`). 키는 `CF-Connecting-IP`(없으면 `anon`), 초과 시 429·`Retry-After: 60`. Vite dev·테스트에서 바인딩이 없으면 통과한다. 다른 API는 이 제한 대상이 아니다(2026-11-17). 이 한도는 위치별 근사치이며 전 세계 합산의 엄격한 상한이 아니다. [Cloudflare 정본](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
+- TTS R2: 바인딩 `TALK_AUDIO` → 버킷 `ai-ps-talk-audio`. 총괄이 버킷 생성과 **30일 만료 규칙** 설정을 완료했다. 캐시는 모델·음성·프롬프트 버전·정규화 텍스트의 해시 키로 저장한다. 음성 요청의 응답 헤더는 `Cache-Control: no-store`, `X-Talk-Cache: hit|miss`이며 브라우저 재생은 objectURL 메모리 캐시를 사용한다.
+- TTS 입력 상한은 **200자**(`MAX_TTS_TEXT_LENGTH`), 튜터 reply는 약 2문장·120자 이내로 지시한다. 391자 실측이 1024토큰에서 잘렸고 출력 240자만으로 PCM 약 1.81MB에 도달했으므로, 출력 한도는 2048토큰으로 올리고 입력을 200자로 낮춰 WAV 2MiB 상한에 여유를 둔다(2026-11-17).
+- `/talk` 변경 배포 후 총괄이 명시적으로 실행하는 유료 스모크: 같은 짧은 일본어 문장으로 `POST /api/talk/speech`를 두 번 보내 **miss → hit 1쌍**과 WAV 정상 여부를 확인한다. 첫 요청만 TTS 비용이 든다. 문장을 바꾸거나 miss를 반복하지 않으며, 기존 R2 객체로 첫 요청부터 hit이면 이를 기록한다. 기본 GET 스모크에는 추가하지 않는다. 로그/보고는 cache·시간·바이트 수만 남기고 키·음성·받아쓴 원문은 출력하지 않는다.
 
 ### 배포 전 리뷰 게이트
 - 공개 노출이 생기거나 늘어나는 변경(새 라우트·로그 필드·오류 응답·공급자 연결·비밀값 취급)은 구현자와 모델 계열이 다른 리뷰어(짝은 `agents.md` 교차 리뷰) 결과를 받은 뒤 배포한다.

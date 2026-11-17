@@ -28,10 +28,10 @@ describe('Given canonical speech cache keys', () => {
     assert.ok(values.every(value => value.ok));
     assert.equal(new Set(values.map(value => value.ok ? value.value.key : '')).size, values.length);
   });
-  it('When text is empty or over the normalized 400-character limit Then refuses it', async () => {
-    assert.equal(MAX_TTS_TEXT_LENGTH, 400);
-    for (const text of ['', ' \t　', 'あ'.repeat(401)]) assert.equal((await createSpeechCacheKey(text, identity)).ok, false);
-    assert.equal((await createSpeechCacheKey('　' + 'あ'.repeat(400) + '　', identity)).ok, true);
+  it('When text is empty or over the normalized 200-character limit Then refuses it', async () => {
+    assert.equal(MAX_TTS_TEXT_LENGTH, 200);
+    for (const text of ['', ' \t　', 'あ'.repeat(201)]) assert.equal((await createSpeechCacheKey(text, identity)).ok, false);
+    assert.equal((await createSpeechCacheKey('　' + 'あ'.repeat(200) + '　', identity)).ok, true);
   });
   it('When identity fields contain a delimiter Then refuses ambiguous hash inputs', async () => {
     assert.equal((await createSpeechCacheKey('こんにちは', { ...identity, model: 'model|voice' })).ok, false);

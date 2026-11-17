@@ -80,7 +80,7 @@ export function createRealtimeSpeaker(config: {
             send({ type: 'session.update', session: {
               type: 'realtime', output_modalities: ['audio'], instructions: INSTRUCTIONS,
               audio: { input: { turn_detection: null }, output: { format: { type: 'audio/pcm', rate: 24000 }, voice: config.voice?.trim() || 'coral' } },
-              max_output_tokens: 1024,
+              max_output_tokens: 2048,
             } });
           } catch { onError(); }
         };

@@ -59,7 +59,8 @@ export function createBrowserRecorder(env = browserEnvironment()): Recorder {
         },
         stop() {
           if (settled || stopping || !capture) return; stopping = true;
-          try { capture.stop(); release(); }
+          // Keep tracks alive until the final dataavailable/onstop (notably Safari MP4).
+          try { capture.stop(); }
           catch { task.finish(failure('녹음을 마치지 못했어요. 텍스트로 입력하거나 다시 시도해 주세요.')); }
           if (!settled) timers.push(env.schedule(() => task.finish(failure('녹음 파일을 받지 못했어요. 다시 시도해 주세요.')), 1500));
         },

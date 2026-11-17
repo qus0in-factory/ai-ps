@@ -41,6 +41,7 @@ export function createRecordingController(recorder: Recorder, transcriber: Trans
       } catch { return fail('녹음이나 받아쓰기를 마치지 못했어요. 텍스트로 입력하거나 다시 시도해 주세요.'); }
       finally { caller.signal.removeEventListener('abort', onAbort); recorder.cancel(); active = undefined; }
     },
+    // start()'s completed callback delivers the Blob/failure to record(); stop only triggers it.
     stop: () => { void recorder.stop(); },
     cancel: () => { active?.abort(); recorder.cancel(); },
   };

@@ -1,5 +1,6 @@
 import type { Result } from '../domain/chat.ts';
 import { isSpeakable } from '../domain/talk/listening.ts';
+import { MAX_TTS_TEXT_LENGTH } from '../domain/talk/speech-cache.ts';
 import type { TalkClient } from '../domain/talk/types.ts';
 import { isTutorReply, record, only, text, LIMITS } from '../domain/talk/session.ts';
 
@@ -16,6 +17,7 @@ export function createHttpTalk(fetcher: typeof fetch = fetch): TalkClient {
       });
       const response = (async (): Promise<Result<T>> => {
         const result = await fetcher(path, { method: 'POST', headers: { ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), Accept: 'application/json' }, body: body instanceof FormData ? body : JSON.stringify(body), signal });
+        if (result.status === 429) return { ok: false, reason: '잠시 후 다시 시도해 주세요.' };
         if (!result.ok) {
           const problem: unknown = await result.json().catch(() => null);
           return { ok: false, reason: record(problem) && text(problem.detail, 500) ? problem.detail : '회화 요청을 처리하지 못했습니다.' };
@@ -30,7 +32,7 @@ export function createHttpTalk(fetcher: typeof fetch = fetch): TalkClient {
   }
   return {
     async speak(words, external) {
-      if (!isSpeakable(words)) return { ok: false, reason: '듣기는 1~400자 문장만 가능해요.' };
+      if (!isSpeakable(words)) return { ok: false, reason: `듣기는 1~${MAX_TTS_TEXT_LENGTH}자 문장만 가능해요.` };
       const timeout = AbortSignal.timeout(45_000);
       const signal = external ? AbortSignal.any([external, timeout]) : timeout;
       const cancelled = { ok: false as const, reason: '음성 요청을 중단했거나 시간이 초과됐어요.' };
@@ -40,6 +42,7 @@ export function createHttpTalk(fetcher: typeof fetch = fetch): TalkClient {
       try {
         const response = (async (): Promise<Result<Blob>> => {
           const result = await fetcher('/api/talk/speech', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/wav' }, body: JSON.stringify({ text: words }), signal });
+          if (result.status === 429) return { ok: false, reason: '잠시 후 다시 시도해 주세요.' };
           if (!result.ok) {
             const problem: unknown = await result.json().catch(() => null);
             return { ok: false, reason: record(problem) && text(problem.detail, 500) ? problem.detail : '음성을 가져오지 못했어요. 다시 눌러주세요.' };

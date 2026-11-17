@@ -12,7 +12,7 @@ describe('Given explicit sentence listening',()=>{
  it('When replaying the same sentence Then reuses its object URL and only one audio plays',async()=>{
   const p=player();let calls=0;let view!:ListeningView;
   const c=createListeningController({speak:async()=>{calls++;return {ok:true,value:new Blob(['wav'])}}},p.port,v=>{view=v});
-  assert.equal(calls,0);assert.equal(canListen('あ'.repeat(401)),false);
+  assert.equal(calls,0);assert.equal(canListen('あ'.repeat(201)),false);assert.equal(canListen('あ'.repeat(200)),true);
   await c.toggle('こんにちは。');assert.equal(view.status,'playing');await c.toggle('こんにちは。');assert.equal(view.status,'idle');
   await c.toggle('こんにちは。');assert.equal(calls,1);assert.equal(p.urls.length,1);
   await c.toggle('こんばんは。');assert.equal(calls,2);assert.ok(p.stopped>0);p.end();assert.equal(view.status,'idle');
@@ -33,6 +33,19 @@ describe('Given explicit sentence listening',()=>{
   const p=player();let view!:ListeningView;p.port.play=async(_url,onEnd)=>{onEnd();return {ok:true,value:undefined}};
   const c=createListeningController({speak:async()=>({ok:true,value:new Blob(['wav'])})},p.port,v=>{view=v});
   await c.toggle('こんにちは。');assert.equal(view.status,'idle');assert.equal(view.error,'');
+ });
+
+ it('When more than five sentences are heard Then evicts the least recently used URL and promotes cache hits',async()=>{
+  const p=player();const requested:string[]=[];
+  const c=createListeningController({speak:async(text)=>{requested.push(text);return {ok:true,value:new Blob(['wav'])}}},p.port,()=>{});
+  for(const text of ['A','B','C','D','E'])await c.toggle(text);
+  assert.equal(p.revoked.length,0);
+  await c.toggle('A');assert.equal(requested.length,5);
+  await c.toggle('F');assert.deepEqual(p.revoked,['blob:1']);
+  await c.toggle('C');assert.equal(requested.length,6);
+  await c.toggle('B');assert.deepEqual(requested,['A','B','C','D','E','F','B']);
+  assert.deepEqual(p.revoked,['blob:1','blob:3']);assert.equal(p.urls.length-p.revoked.length,5);
+  c.dispose();assert.equal(new Set(p.revoked).size,p.urls.length);assert.equal(p.revoked.length,p.urls.length);
  });
 
 });

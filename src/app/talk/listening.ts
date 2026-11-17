@@ -24,7 +24,13 @@ export function createListeningController(client: SpeechClient, player: AudioPla
           const result = await Promise.race([client.speak(text, caller.signal), aborted]);
           if (current !== generation || disposed) return;
           if (!result.ok) { publish({ text, status: 'idle', error: result.reason }); return; }
-          url = player.createUrl(result.value); urls.set(text, url);
+          url = player.createUrl(result.value);
+        }
+        // Map insertion order tracks last use, including replays from memory.
+        urls.delete(text); urls.set(text, url);
+        if (urls.size > 5) {
+          const oldest = urls.keys().next().value!;
+          player.revokeUrl(urls.get(oldest)!); urls.delete(oldest);
         }
         let completed = false;
         const result = await Promise.race([player.play(url,

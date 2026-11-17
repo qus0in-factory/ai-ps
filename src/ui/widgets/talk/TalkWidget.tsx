@@ -27,7 +27,7 @@ export function TalkWidget(props: { audioPlayer: AudioPlayer; recorder: Recorder
     if (!result.ok) throw new Error(result.reason);
   };
   const start = createMutation(() => ({ mutationFn: () => settle(controller.start()), retry: 0, networkMode: 'always' as const }));
-  const send = createMutation(() => ({ mutationFn: (text: string) => settle(controller.send(text)), retry: 0, networkMode: 'always' as const }));
+  const send = createMutation(() => ({ mutationFn: (text: string) => { listening.stop(); return settle(controller.send(text)); }, retry: 0, networkMode: 'always' as const }));
   const finish = createMutation(() => ({ mutationFn: () => settle(controller.finish()), retry: 0, networkMode: 'always' as const }));
   const capture = createMutation(() => ({ mutationFn: () => { listening.stop(); return settle(recording.record()); }, retry: 0, networkMode: 'always' as const }));
   const busy = () => capture.isPending || isBusy(view()) || start.isPending || send.isPending || finish.isPending;

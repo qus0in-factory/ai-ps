@@ -3,6 +3,10 @@ import type { TalkLogListener } from '../domain/talk/logging.ts';
 
 export function createTalkLogger(logger: Pick<Logger, 'info' | 'warn'>): TalkLogListener {
   return entry => {
+    if (entry.event === 'rate_limited') {
+      logger.warn({ component: 'talk', event: entry.event, path: entry.path, ok: entry.ok }, 'Talk 요청 제한');
+      return;
+    }
     const level = entry.ok ? 'info' : 'warn';
     logger[level]({ component: 'talk', event: entry.event, ok: entry.ok, ms: entry.ms,
       ...(entry.turns === undefined ? {} : { turns: entry.turns }),

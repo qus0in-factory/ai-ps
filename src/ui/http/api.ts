@@ -184,7 +184,7 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
         ...(result.ok ? { cache: result.value.cache, outputBytes: result.value.bytes.byteLength } : {}) });
     } catch { /* Logging must not discard generated speech. */ }
     return result.ok ? new Response(Uint8Array.from(result.value.bytes).buffer, {
-      headers: { 'Content-Type': 'audio/wav', 'X-Talk-Cache': result.value.cache, 'Cache-Control': 'private, max-age=86400' },
+      headers: { 'Content-Type': 'audio/wav', 'X-Talk-Cache': result.value.cache, 'Cache-Control': 'no-store' },
     }) : problem(502, '음성을 만들지 못했습니다. 잠시 후 다시 시도해주세요.', c.req.path);
   });
   postOnly('/api/talk/speech');

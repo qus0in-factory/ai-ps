@@ -30,13 +30,32 @@ describe('Given a browser microphone adapter', () => {
     assert.equal(d.media.state, 'inactive'); assert.equal(d.stops, 1); assert.equal(completions, 1);
     recorder.cancel(); assert.equal(completions, 1);
   });
-  it('When a device never emits stop Then releases tracks immediately and resolves a bounded failure', async () => {
+  it('When a device never emits stop Then releases tracks at the watchdog deadline and resolves a bounded failure', async () => {
     const d = device(['audio/webm;codecs=opus', 'audio/mp4']);
     d.media.stop = function () { this.state = 'inactive'; };
     const recorder = createBrowserRecorder(d.env); await recorder.start(() => {});
     assert.equal(d.media.mimeType, 'audio/webm;codecs=opus');
-    d.advance(1000); const pending = recorder.stop(); assert.equal(d.stops, 1);
-    d.advance(1500); assert.equal((await pending).ok, false);
+    d.advance(1000); const pending = recorder.stop(); assert.equal(d.stops, 0);
+    d.advance(1500); assert.equal((await pending).ok, false); assert.equal(d.stops, 1);
+  });
+  it('When the final MP4 chunk arrives after stop Then keeps tracks alive until onstop and preserves the chunk', async () => {
+    for (const automatic of [false, true]) {
+      const d = device(['audio/mp4']);
+      d.media.stop = function () { this.state = 'inactive'; };
+      const recorder = createBrowserRecorder(d.env); const results: Result<Blob>[] = [];
+      await recorder.start(value => { results.push(value); });
+      d.media.ondataavailable?.({ data: new Blob(['first']) });
+      d.advance(automatic ? 30000 : 1000);
+      if (!automatic) void recorder.stop();
+      assert.equal(d.stops, 0); assert.equal(results.length, 0);
+      d.media.ondataavailable?.({ data: new Blob(['last']) });
+      assert.equal(d.stops, 0);
+      d.media.onstop?.();
+      const result = results[0];
+      assert.equal(results.length, 1); assert.equal(d.stops, 1); assert.equal(result?.ok, true);
+      if (result?.ok) { assert.equal(await result.value.text(), 'firstlast'); assert.equal(result.value.type, 'audio/mp4'); }
+      d.advance(1500); assert.equal(d.stops, 1);
+    }
   });
   it('When permission is denied or codecs are unsupported Then returns Korean guidance without private details', async () => {
     const d = device([]), unsupported = createBrowserRecorder(d.env);

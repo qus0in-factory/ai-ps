@@ -18,8 +18,10 @@ import { createApi } from './ui/http/api.ts';
 import { createTutor } from './app/talk/tutor.ts';
 import { createOpenAITranscriber } from './infra/openai-transcribe.ts';
 import { createTalkLogger } from './infra/talk-logger.ts';
+import { limitTalkRequest } from './ui/http/talk-rate-limit.ts';
+import type { TalkRateLimitBindings } from './domain/talk/rate-limit.ts';
 
-export interface Env {
+export interface Env extends TalkRateLimitBindings {
   ASSETS: { fetch(request: Request): Promise<Response> };
   TALK_AUDIO?: R2Bucket;
   OPENAI_API_KEY?: string;
@@ -35,10 +37,12 @@ export interface Env {
 }
 
 export default {
-  fetch(request: Request, env: Env): Response | Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     const logger = createConsoleLogger({ level: env.LOG_LEVEL });
     const talkLog = createTalkLogger(logger);
+    const limited = await limitTalkRequest(request, env, talkLog);
+    if (limited) return limited;
     const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
       : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
     const modelConfig = {

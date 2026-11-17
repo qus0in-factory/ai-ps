@@ -11,6 +11,12 @@ function capture() {
 }
 
 describe('Given a Talk logger', () => {
+  it('When rate limited Then logs only the fixed event, path and outcome', () => {
+    const { entries, logger } = capture();
+    createTalkLogger(logger)({ event: 'rate_limited', path: '/api/talk/speech', ok: false,
+      ip: '192.0.2.123', key: 'private', ms: 1 } as never);
+    assert.deepEqual(entries, [{ method: 'warn', value: { component: 'talk', event: 'rate_limited', path: '/api/talk/speech', ok: false } }]);
+  });
   it('When logging speech Then includes only cache, lengths, bytes and timing', () => {
     const { entries, logger } = capture();
     createTalkLogger(logger)({ event: 'speech', ok: true, ms: 5, cache: 'hit', inputChars: 6, outputBytes: 48,

@@ -48,7 +48,7 @@ describe('Given a server-side Realtime Japanese speaker', () => {
     const session = socket.sent[0]!.session;
     assert.equal(session.type, 'realtime'); assert.deepEqual(session.output_modalities, ['audio']);
     assert.deepEqual(session.audio.output, { format: { type: 'audio/pcm', rate: 24000 }, voice: 'coral' });
-    assert.equal(session.audio.input.turn_detection, null); assert.equal(session.max_output_tokens, 1024);
+    assert.equal(session.audio.input.turn_detection, null); assert.equal(session.max_output_tokens, 2048);
     assert.match(session.instructions, /そのまま/); assert.match(session.instructions, /翻訳/);
     assert.deepEqual(socket.sent[1]!.item.content, [{ type: 'input_text', text: 'こんにちは。' }]);
     assert.equal(socket.accepts, 1); assert.equal(socket.closes, 1);
@@ -125,7 +125,7 @@ describe('Given a server-side Realtime Japanese speaker', () => {
   it('When no key, invalid text or an already cancelled signal is given Then never connects', async () => {
     const connect = async () => { assert.fail('must not connect'); };
     const speaker = createRealtimeSpeaker({ apiKey: 'key', connect });
-    for (const text of ['', ' ', 'x'.repeat(401)]) assert.equal((await speaker.speak(text)).ok, false);
+    for (const text of ['', ' ', 'x'.repeat(201)]) assert.equal((await speaker.speak(text)).ok, false);
     assert.equal((await speaker.speak('こんにちは。', AbortSignal.abort())).ok, false);
     assert.equal((await createRealtimeSpeaker({ connect }).speak('こんにちは。')).ok, false);
   });

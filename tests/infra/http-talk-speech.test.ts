@@ -14,10 +14,10 @@ describe('Given speech fetched through the Talk BFF', () => {
     if(result.ok){assert.ok(result.value instanceof Blob);assert.equal(result.value.type,'audio/wav');assert.equal(result.value.size,46)}
     assert.equal(calls,1);
   });
-  it('When text exceeds 400 characters Then never requests speech; Unicode characters count once', async () => {
+  it('When text exceeds 200 characters Then never requests speech; Unicode characters count once', async () => {
     let calls=0;const client=createHttpTalk(async()=>{calls++;return new Response(wav,{headers:{'Content-Type':'audio/wav'}})});
-    for(const text of ['', ' ', 'あ'.repeat(401)])assert.equal((await client.speak(text)).ok,false);
-    assert.equal(calls,0);assert.equal((await client.speak('😀'.repeat(400))).ok,true);
+    for(const text of ['', ' ', 'あ'.repeat(201)])assert.equal((await client.speak(text)).ok,false);
+    assert.equal(calls,0);assert.equal((await client.speak('😀'.repeat(200))).ok,true);
   });
   it('When a problem, invalid audio or cancellation arrives Then returns a safe failure without retry', async () => {
     const failed=await createHttpTalk(async()=>Response.json({detail:'音声を作れません。'},{status:502})).speak('こんにちは。');assert.equal(failed.ok,false);

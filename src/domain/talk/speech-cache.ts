@@ -1,6 +1,6 @@
 import type { Result } from '../chat.ts';
 
-export const MAX_TTS_TEXT_LENGTH = 400;
+export const MAX_TTS_TEXT_LENGTH = 200;
 
 export const TALK_FIXED_PHRASES = Object.freeze({
   greeting: 'こんにちは。今日は何について話しましょうか？',

@@ -55,6 +55,7 @@ describe('Given conversation prompts', () => {
     assert.equal(buildTutorMessages(session)[0]!.role, 'system');
     assert.match(buildTutorMessages(session)[0]!.content, /Japanese/);
     assert.match(buildTutorMessages(session)[0]!.content, /N5.*N4/);
+    assert.match(buildTutorMessages(session)[0]!.content, /two short sentences.*120 characters/);
     session.turns.push({ learner: '', tutor }, { learner: '昨日、公園に行きます。', tutor: { ...tutor, correction: '과거형 行きました를 써요。' } });
     const messages = buildTutorMessages(session, '友達に会いました。');
     assert.deepEqual(messages.map(m => m.role), ['system','user','assistant','user','assistant','user']);

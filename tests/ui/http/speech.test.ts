@@ -23,7 +23,7 @@ describe('Given POST /api/talk/speech', () => {
       const response = await api.request(path, post({ text: 'こんにちは。' }));
       assert.equal(response.status, 200); assert.equal(response.headers.get('Content-Type'), 'audio/wav');
       assert.equal(response.headers.get('X-Talk-Cache'), cache);
-      assert.equal(response.headers.get('Cache-Control'), 'private, max-age=86400');
+      assert.equal(response.headers.get('Cache-Control'), 'no-store');
       assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [82, 73, 70, 70]);
     }
     assert.equal(calls, 1); assert.equal(logs.length, 2);
@@ -35,13 +35,13 @@ describe('Given POST /api/talk/speech', () => {
     }
     assert.doesNotMatch(JSON.stringify(logs), /こんにちは/);
   });
-  it('When JSON is invalid, the input is outside 1..400 characters or the body is too large Then rejects before speaking', async () => {
+  it('When JSON is invalid, the input is outside 1..200 characters or the body is too large Then rejects before speaking', async () => {
     let calls = 0;
     const speaker: CachedSpeaker = { speak: async () => { calls++; throw Error('must not call'); } };
     const api = createApi({ ...deps, talk: { tutor, speaker } });
     const cases: [RequestInit, number][] = [
       [{ method: 'GET' }, 405], [{ method: 'POST', body: '{' }, 400],
-      ...[null, [], {}, { text: 1 }, { text: '' }, { text: '　 ' }, { text: 'x'.repeat(401) }, { text: 'x', extra: true }].map(body => [post(body), 400] as [RequestInit, number]),
+      ...[null, [], {}, { text: 1 }, { text: '' }, { text: '　 ' }, { text: 'x'.repeat(201) }, { text: 'x', extra: true }].map(body => [post(body), 400] as [RequestInit, number]),
       [{ method: 'POST', body: 'x'.repeat(4001) }, 413],
     ];
     for (const [request, status] of cases) {
@@ -51,11 +51,11 @@ describe('Given POST /api/talk/speech', () => {
     }
     assert.equal(calls, 0);
   });
-  it('When 400 Unicode characters are submitted Then accepts the maximum', async () => {
+  it('When 200 Unicode characters are submitted Then accepts the maximum', async () => {
     const speaker: CachedSpeaker = { speak: async text => {
-      assert.equal([...text].length, 400); return { ok: true, value: { bytes: new Uint8Array([1, 2]), mimeType: 'audio/wav', cache: 'miss' } };
+      assert.equal([...text].length, 200); return { ok: true, value: { bytes: new Uint8Array([1, 2]), mimeType: 'audio/wav', cache: 'miss' } };
     } };
-    const response = await createApi({ ...deps, talk: { tutor, speaker } }).request(path, post({ text: 'あ'.repeat(400) }));
+    const response = await createApi({ ...deps, talk: { tutor, speaker } }).request(path, post({ text: 'あ'.repeat(200) }));
     assert.equal(response.status, 200);
   });
   it('When synthesis fails or throws Then returns safe 502 and failure metrics without diagnostics', async () => {

@@ -54,7 +54,7 @@ describe('Given a cached speaker before the paid TTS provider', () => {
   it('When text is too long Then refuses it before even looking up the cache or calling the speaker', async () => {
     const cache: AudioCache = { get: async () => { throw new Error('Must not read'); }, put: async () => { throw new Error('Must not write'); } };
     const speaker: Speaker = { speak: async () => { throw new Error('Must not call provider'); } };
-    assert.equal((await createCachedSpeaker(speaker, cache, options).speak('あ'.repeat(401))).ok, false);
+    assert.equal((await createCachedSpeaker(speaker, cache, options).speak('あ'.repeat(201))).ok, false);
   });
   it('When cache reading fails Then does not bypass the cache with a paid provider call', async () => {
     let calls = 0;

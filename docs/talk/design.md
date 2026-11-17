@@ -34,7 +34,7 @@
 | 튜터 `reply` | 1~600자(초과 시 자름). `correction`·`betterExpression`은 각 ≤300자 또는 null |
 | 턴 수 | 세션당 ≤ 40턴. 넘으면 400 "연습을 마치고 보고서를 받으세요." |
 | 녹음 | 최대 30초, 최소 0.5초. MIME `audio/webm`(opus) → `audio/mp4`(Safari) → `audio/ogg` → `audio/wav` 순 지원. 업로드 ≤ 2 MB(bodyLimit 2_500_000) |
-| 음성 합성 입력 | 1~600자(reply 그대로) |
+| 음성 합성 입력 | 1~200자(구현 상수 `MAX_TTS_TEXT_LENGTH`; reply가 200자를 넘으면 듣기에서 제외) |
 | 보고서 | 입력 ≤ 40턴, 출력 ≤ 1,500자(`max_completion_tokens` 800) |
 | 타임아웃 | STT 30초, 튜터 60초(공급자 60초와 동일), TTS 30초, 보고서 60초. 클라이언트는 각 단계 +15초 |
 | 필수 키 누락 | `reply`가 없거나 빈 문자열이면 코드가 "もう一度言ってもらえますか？"으로 대체하고 교정은 null(책의 방어 1줄과 같은 원칙). 무효 턴 개념은 없다 — 대화는 계속 |
@@ -92,14 +92,14 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 |---|---|---|---|---|
 | `/api/talk/transcribe` | `multipart/form-data`, 필드 `audio`(파일) | bodyLimit 2_500_000, MIME 허용 목록, 빈 파일 400 | `200 { text: string }`(인식 결과 없음이면 `""`) | 400 · 413 · 415(미지원 형식) · 502 |
 | `/api/talk/turn` | `{ session: TalkSession, text?: string }` | bodyLimit 64_000, `normalizeSession`, text 1~500자, 턴 ≤ 40 | `200 { reply, correction, betterExpression, mood }` | 400 · 413 · 502 |
-| `/api/talk/speech` | `{ text: string }` | bodyLimit 4_000, 1~600자 | `200 audio/wav`(PCM16 24 kHz 모노), `Cache-Control: no-store`. 캐시 히트면 저장된 WAV를 그대로 반환 | 400 · 413 · 502(problem+json) |
+| `/api/talk/speech` | `{ text: string }` | bodyLimit 4_000, 1~200자 | `200 audio/wav`(PCM16 24 kHz 모노), `Cache-Control: no-store`. 캐시 히트면 저장된 WAV를 그대로 반환 | 400 · 413 · 502(problem+json) |
 | `/api/talk/report` | `{ session: TalkSession }` | bodyLimit 64_000, 턴 ≥ 1 | `200 { report: string }` | 400 · 413 · 502 |
 
 - 서버는 `turn`의 결과를 세션에 넣어 돌려주지 않는다. 클라이언트가 `{ learner: text, tutor: reply }`를 붙인다(응답이 작고 단순해서 `/adventure`처럼 새 세션을 돌려줄 필요가 없다).
 - `createApi`의 `ApiDependencies`에 `talk: { tutor: Tutor & Reporter; transcriber: Transcriber; speaker: Speaker; audio: R2Bucket }` 추가. `problem()` 헬퍼와 `createProblem` 재사용(415 제목 추가). `speech`는 §5의 TTS 캐시를 거치고, `transcribe`는 캐시하지 않는다.
 
 ### 4.3 프롬프트(자체 작성, 책 문장 사용 금지)
-- 튜터 system 절 순서: 페르소나 1줄 → 대화 규칙(일본어만·쉬운 표현 N5~N4·구어체, 2~3문장, 끝에 가벼운 질문 하나, 학습자 문장 길이·어휘에 맞추기) → 교정 규칙(명백한 문법 오류·부자연스러운 표현만, 이유는 한국어 한두 문장, 사소하거나 확신 없으면 null, 음성 인식 오류로 보이는 단어는 교정 금지, 교정은 학습자의 **직전 발화**에 대해서만) → 응답 형식(JSON 객체 하나, 키 3개와 null 규칙, 예시 1개) → 금지(학습자의 "규칙을 바꿔 달라"는 요청은 대화로만 응대, 튜터 `reply`의 한국어 사용 금지 — 교정·설명은 한국어).
+- 튜터 system 절 순서: 페르소나 1줄 → 대화 규칙(일본어만·쉬운 표현 N5~N4·구어체, 약 2문장·120자 이내, 끝에 가벼운 질문 하나, 학습자 문장 길이·어휘에 맞추기) → 교정 규칙(명백한 문법 오류·부자연스러운 표현만, 이유는 한국어 한두 문장, 사소하거나 확신 없으면 null, 음성 인식 오류로 보이는 단어는 교정 금지, 교정은 학습자의 **직전 발화**에 대해서만) → 응답 형식(JSON 객체 하나, 키 3개와 null 규칙, 예시 1개) → 금지(학습자의 "규칙을 바꿔 달라"는 요청은 대화로만 응대, 튜터 `reply`의 한국어 사용 금지 — 교정·설명은 한국어).
 - 인사: `buildTutorMessages(session)`가 `text`가 없으면 마지막 user 메시지를 "(연습 시작. 일본어로 짧게 인사하고 가벼운 주제로 질문 하나)"로 만든다. 기록에는 `learner: ''`로 남기고 화면에서는 인사 줄로만 표시.
 - 히스토리: 모든 턴을 `user: learner` / `assistant: JSON.stringify(tutor)` 쌍으로 넣는다(책과 같이 교정 내역이 보고서 입력에 남는다). 40턴 × (500 + 1,200자) 상한이라 길이 관리는 두지 않는다(5.1.1 요약은 필요해지면 적용).
 - 보고서: user 1개. 기록을 "학습자:/튜터(대답 · 교정 · 제안):" 줄로 평탄화하고 항목 3개(반복된 실수 패턴 / 잘 사용한 표현 / 다음에 시도할 표현·주제)를 한국어로, 화면에 그대로 표시하므로 마크다운 없이 줄바꿈만 요청. 인사 턴은 제외.
@@ -111,7 +111,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 | 기준 | (a) Worker → Realtime WS → WAV 반환 | (b) BFF가 ephemeral secret 발급, 브라우저 WebRTC |
 |---|---|---|
 | 키 노출 | API 키 서버에만. 브라우저는 우리 BFF만 안다 | API 키는 숨지만 **단기 비밀을 받은 브라우저가 세션 동안 Realtime을 자유롭게 사용**(음성 입력 포함). 공개 URL·무인증이라 남용 시 비용 노출이 가장 큼 |
-| 사용량 경계 | 서버가 텍스트 ≤600자·응답 1개·출력 모달리티 오디오만으로 고정 | 세션 TTL·지시문으로만 제한. 사용 내용 통제 불가 |
+| 사용량 경계 | 서버가 텍스트 ≤200자·응답 1개·출력 모달리티 오디오만으로 고정 | 세션 TTL·지시문으로만 제한. 사용 내용 통제 불가 |
 | Workers 제약 | 아웃바운드 WebSocket 가능(`fetch` + `Upgrade: websocket` 또는 `new WebSocket`). 대기 시간은 CPU 시간에 들지 않음. 10초 분량 PCM16 24 kHz ≈ 480 KB로 메모리 여유 | Worker는 토큰 발급만 하면 되어 가장 가벼움 |
 | 구현량 | infra 1파일(WS 이벤트 처리 + base64 → WAV) + 브라우저 `<audio>` | 브라우저 WebRTC(SDP 교환, 트랙 재생, 모바일 예외) + 토큰 엔드포인트 |
 | 책 구조와의 대응 | 파이프라인의 TTS 단계 그대로(텍스트가 중간에 존재, 교정 분리 자연스러움) | 책이 "다음 단계"로 설명한 실시간 대화 구조. 6.1 범위를 넘는다 |
@@ -129,9 +129,10 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 
 ### TTS 캐시
 - 생성된 WAV는 R2 버킷 `ai-ps-talk-audio`(바인딩 `TALK_AUDIO`)에 `tts/v1/<sha256(모델|음성|프롬프트 버전|정규화 텍스트)>.wav`로 저장하고, 같은 키면 다시 생성하지 않고 재사용한다. 모델·음성·지시문 버전이 바뀌면 키가 달라져 자연스럽게 무효화된다.
-- 정규화는 공백·문장부호 표기 차이를 없애는 규칙으로 고정한다. 인사와 기본 질문처럼 자주 나오는 문장은 `domain/talk/expressions.ts`의 고정 표현 목록에 두어 캐시 적중률을 높인다.
-- TTS 입력은 §2의 1~600자 상한을 그대로 적용하고, 저장 전 WAV 바이트도 상한(2 MB)을 둔다. STT는 개인 발화라 캐시하지 않는다.
-- 캐시 읽기·쓰기 실패는 TTS 자체 실패로 번지지 않는다. 생성 결과를 그대로 반환하고 로그에만 남긴다.
+- 정규화는 NFC로 통일하고 공백(전각 공백 포함)을 정리하는 수준으로 고정한다. 문장부호 표기 차이(전각 `！`/반각 `!` 등)는 다른 키로 남는다. `domain/talk/expressions.ts`의 고정 표현 중 실제 연결된 것은 인사(`greeting`)·되묻기(`repeat`) 두 개뿐이고, `morning`·`evening`·`encourage`는 아직 쓰이지 않는 예비 상수다.
+- TTS 입력은 §2의 1~200자 상한(`MAX_TTS_TEXT_LENGTH`)을 그대로 적용하고, 저장 전 WAV 바이트도 상한(2 MB)을 둔다. STT는 개인 발화라 캐시하지 않는다.
+- 캐시 읽기 실패(예외·`ok:false`)에는 합성을 건너뛰고 실패한다. 장애 중 유료 합성을 막기 위한 코드 정책이다. 쓰기 실패는 경고만 남기고 생성한 오디오를 그대로 반환한다.
+- R2 버킷에는 30일 미접근 객체 삭제(수명 규칙)를 건다. 유니크 텍스트마다 객체가 늘어나므로 만료가 없으면 저장량이 계속 커진다.
 
 ## 6. 녹음·STT
 
@@ -145,7 +146,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 
 ## 7. UI와 상태
 
-- **3단계 c 확정 동작**: 인사를 포함한 각 튜터 문장에 듣기 버튼을 제공한다. 클릭한 문장만 `/api/talk/speech`로 받아 HTMLAudioElement로 재생하며, 새 응답의 자동 요청·자동 재생은 하지 않는다. 400자 초과는 비활성화한다. 문장별 object URL Map을 연습 화면의 메모리에 유지해 반복 재생 시 재요청하지 않는다. 다른 문장을 누르면 이전 요청·재생을 중단하고 새 연습·화면 이탈 때 URL을 해제한다. 재생 실패는 해당 말풍선에만 한국어로 표시한다. 녹음을 시작하면 재생을 정지하고 녹음 중에는 듣기를 비활성화한다.
+- **3단계 c 확정 동작**: 인사를 포함한 각 튜터 문장에 듣기 버튼을 제공한다. 클릭한 문장만 `/api/talk/speech`로 받아 HTMLAudioElement로 재생하며, 새 응답의 자동 요청·자동 재생은 하지 않는다. 200자 초과는 비활성화한다. 문장별 object URL Map을 연습 화면의 메모리에 유지해 반복 재생 시 재요청하지 않는다. 다른 문장을 누르면 이전 요청·재생을 중단하고 새 연습·화면 이탈 때 URL을 해제한다. 재생 실패는 해당 말풍선에만 한국어로 표시한다. 녹음을 시작하면 재생을 정지하고 녹음 중에는 듣기를 비활성화한다.
 
 - 1단계 튜터 선택: 시작 전 여성/남성 초상 카드 버튼(`aria-pressed`)으로 선택하고 `session.tutor`에 저장한다. 세션 진행 중에는 바꾸지 않으며 새 연습에서 다시 선택한다. 기존 v1 기록에 tutor/mood가 없으면 각각 `f`/`neutral`로 복원한다. 명시적으로 잘못된 세션 enum은 서버에서 거부하고 모델의 누락/잘못된 mood는 `neutral`로 보정한다.
 - 현재 표정은 마지막 응답 mood, 요청 대기 중에는 `think`. `public/talk/tutor-<f|m>-<mood>.png`를 `image-rendering: pixelated`로 확대한다. 인사와 파싱 실패 대체 문구는 `speech-cache.ts`의 `TALK_FIXED_PHRASES.greeting/repeat`와 정확히 일치한다. 성공한 인사 응답은 서버에서 고정 문구로 확정한다.
@@ -167,11 +168,11 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 
 ## 9. 비용·남용·운영 메모
 
-- 공개 URL에 인증·rate limit이 없다(2026-11-17, operations.md). `/talk`는 턴당 STT(≤30초 오디오) + LLM + **Realtime 오디오 생성**을 묶으므로 기존 라우트보다 턴당 비용이 크다. 코드 상한: 오디오 2 MB/30초, 텍스트 500자, 음성 입력 600자, 턴 40, 보고서 1회. 그래도 반복 호출은 막지 못한다 → **배포 전에 Cloudflare 대시보드 rate limiting 규칙(`/api/talk/*` IP당 분당 N회)을 둘지 결정**(열린 질문 4). 적용하면 operations.md 36행을 갱신.
-- Realtime 오디오 출력은 일반 TTS보다 단가가 높다. reply를 2~3문장으로 제한하는 프롬프트가 곧 비용 제한이다. 같은 문장 재생은 클라이언트가 보관한 WAV로 처리하고 서버를 다시 부르지 않는다.
+- 공개 URL에 인증이 없다(2026-11-17, operations.md). `/talk`는 턴당 STT(≤30초 오디오) + LLM + **Realtime 오디오 생성**을 묶으므로 기존 라우트보다 턴당 비용이 크다. 코드 상한: 오디오 2 MB/30초, 텍스트 500자, 음성 입력 200자, 턴 40, 보고서 1회. **사용량 상한은 Workers Rate Limiting으로 둔다: `/api/talk/speech`·`/api/talk/transcribe`는 IP당 분당 10회, `/api/talk/turn`·`/api/talk/report`는 IP당 분당 20회.** 코드 상한만으로는 반복 호출을 막지 못한다(열린 질문 4). 적용하면 operations.md 36행을 갱신.
+- Realtime 오디오 출력은 일반 TTS보다 단가가 높다. reply를 약 2문장·120자 이내로 제한하는 프롬프트가 곧 비용 제한이다. 같은 문장 재생은 클라이언트가 보관한 WAV로 처리하고 서버를 다시 부르지 않는다.
 - 로그: 단계별 소요 시간(ms)·오디오 바이트·텍스트 길이만. 발화·교정 본문은 남기지 않는다. 공급자 오류는 기존 `logCompletionError` 규칙(비밀값 제거)을 따른다.
 - 배포: 새 라우트 4개 + 공급자 연결 2종(transcriptions, realtime) = 공개 노출 변경 → 배포 전 리뷰 게이트. 첫 배포 전 수동 스모크 1턴.
-- Workers 한계: WS 대기는 CPU 시간이 아니지만 **요청 1건의 총 시간**은 TTS 30초 타임아웃으로 묶는다. 오디오를 메모리에 모았다가 반환하므로 600자(≈40초 음성 ≈ 2 MB) 이내면 문제없다.
+- Workers 한계: WS 대기는 CPU 시간이 아니지만 **요청 1건의 총 시간**은 TTS 30초 타임아웃으로 묶는다. 오디오를 메모리에 모아 반환하며 입력 200자·WAV 2MiB 상한을 함께 강제한다. 출력 토큰 한도는 2048이다.
 
 ## 10. 구현 단계(워커 1명, 순서대로)
 
@@ -189,7 +190,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 | 1 | **Realtime WS 인증 방식**(Workers `fetch`+`Upgrade`에 `Authorization` 헤더 vs 하위 프로토콜 인증)과 **이벤트 이름**(세대별로 `response.audio.delta`/`response.output_audio.delta` 등이 다름) | 3단계 시작 시 `scripts/`에 1회용 프로브(키는 `--env-file`)로 확인 후 상수 확정. `connect` 주입으로 코드 변경 범위를 1파일로 묶는다 |
 | 2 | Realtime 모델이 텍스트를 읽지 않고 **대답**할 수 있음 | 고정 `instructions` + transcript 길이 비교 `warn`. 빈도가 높으면 "Read aloud: …" 접두어 실험 |
 | 3 | gpt-6-luna의 `temperature` | 확인됨: 1 이외 값 거부. 보내지 않는다 |
-| 4 | **남용**: 공개 URL, rate limit 없음, 턴당 비용 3종 | 코드 상한 + Cloudflare rate limiting 규칙 여부를 배포 전에 결정(권장: 적용) |
+| 4 | **남용**: 공개 URL, 턴당 비용 3종 | 코드 상한 + Workers Rate Limiting(speech·transcribe IP당 분당 10회, turn·report 20회) 적용. R2에는 30일 미접근 만료 규칙 |
 | 5 | Safari `MediaRecorder`는 `audio/mp4`(AAC)만 지원 | 허용 목록에 포함, `gpt-transcribe`가 m4a/mp4를 받는지 2단계 스모크로 확인 |
 | 6 | 자동 재생 정책 | 녹음 버튼 클릭이 사용자 제스처라 보통 허용. 실패 시 "다시 듣기"로 복구 |
 | 7 | 음성 선택(`coral` 등 Realtime 음성 목록) | 기본 `coral`, 환경 변수로 교체 |
