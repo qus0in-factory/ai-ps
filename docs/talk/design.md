@@ -1,6 +1,6 @@
-# /talk 구현 설계 — 영어 회화 연습
+# /talk 구현 설계 — 일본어 회화 연습
 
-작성: ps-fable, 2026-11-17. 근거: `analysis.md`(책 6.1절 원칙), ai-ps 현재 코드(Solid + Hono BFF + Cloudflare Workers, ui/app/domain/infra). 책 범위(STT → LLM → TTS 파이프라인, 교정은 화면에만, 세션 보고서)에 맞춘 최소 설계다. 발화 끝 감지·통합 오디오 모델·실시간 대화는 범위 밖.
+작성: ps-fable, 2026-11-17. 근거: `analysis.md`(책 6.1절 원칙), ai-ps 현재 코드(Solid + Hono BFF + Cloudflare Workers, ui/app/domain/infra). 책 범위(STT → LLM → TTS 파이프라인, 교정은 화면에만, 세션 보고서)에 맞춘 최소 설계다. 학습자는 한국어 화자이고 책 예제를 옮기지 않기 위해 연습 언어는 일본어로 정했다. 발화 끝 감지·통합 오디오 모델·실시간 대화는 범위 밖.
 
 ## 0. 결정 요약
 
@@ -8,9 +8,10 @@
 |---|---|
 | 라우트 | `/talk`. API는 `/api/talk/*` 4개(transcribe · turn · speech · report), 모두 POST |
 | 응답 형식 | 단일 모델 호출이라 **JSON**(NDJSON 없음). 오디오만 `audio/wav` 바이너리. 오류는 RFC 9457 `application/problem+json` |
-| 텍스트 모델 | `OPENAI_MODEL`(gpt-6-luna). 튜터: `response_format: json_object`, reasoning 없음. 보고서: 평문. temperature는 보내지 않는다(gpt-6-luna는 1 이외 값을 거부, `/adventure`와 동일) |
-| STT | 브라우저 `MediaRecorder` → BFF 멀티파트 업로드 → `/v1/audio/transcriptions` `gpt-transcribe`, `language=en`. 녹음 최대 **30초**, 본문 최대 **2 MB** |
+| 텍스트 모델 | `OPENAI_MODEL`(gpt-6-luna). 튜터 `reply`는 쉬운 일본어(N5~N4 기본), 교정·설명·보고서는 한국어. 튜터: `response_format: json_object`, reasoning 없음. 보고서: 평문. temperature는 보내지 않는다(gpt-6-luna는 1 이외 값을 거부, `/adventure`와 동일) |
+| STT | 브라우저 `MediaRecorder` → BFF 멀티파트 업로드 → `/v1/audio/transcriptions` `gpt-transcribe`, `language=ja`. 녹음 최대 **30초**, 본문 최대 **2 MB**. STT는 캐시하지 않는다 |
 | TTS | **(a) Worker가 서버 측 WebSocket으로 Realtime API(`gpt-realtime-2.1-mini`)에 텍스트를 보내 오디오를 받아 WAV로 반환**. 키는 서버에만. (b) ephemeral secret + 브라우저 WebRTC는 채택하지 않음(§4) |
+| TTS 캐시 | R2 버킷 `ai-ps-talk-audio`(바인딩 `TALK_AUDIO`)에 `tts/v1/<sha256(모델|음성|프롬프트 버전|정규화 텍스트)>.wav`로 저장·재사용(§5) |
 | 세션 | 서버 **무상태**. 턴 기록(학습자 텍스트 + 튜터 JSON)은 클라이언트가 보관해 매 요청에 보내고 서버는 검증 후 사용(`/adventure`와 같은 방식) |
 | 상태 관리 | zustand(vanilla + persist, 턴 기록만) + 기존 `useStore` 브리지. 파이프라인 1턴 = TanStack `createMutation` 1개(transcribe → turn → speech 순차), 단계마다 phase 갱신 |
 | 교정 표시 | 책 결정 그대로: 교정·제안은 **화면에만**, 음성은 `reply`만 |
@@ -19,7 +20,7 @@
 
 ## 1. 사용자 흐름
 
-1. `/talk` 진입 → "연습 시작" → 튜터가 먼저 영어로 인사(`turn`에 학습자 텍스트 없이 요청) → 인사 음성 재생.
+1. `/talk` 진입 → "연습 시작" → 튜터가 먼저 일본어로 인사(`turn`에 학습자 텍스트 없이 요청) → 인사 음성 재생.
 2. "말하기" 버튼을 누르고 말한 뒤 다시 눌러 멈춤(30초면 자동 정지) → 단계 표시 "듣는 중 → 생각 중 → 말하는 중" → 인식 텍스트, 교정 카드(있을 때), 튜터 대답 표시 → 대답 음성 자동 재생, "다시 듣기" 가능.
 3. 1단계에서는 텍스트 입력으로도 말할 수 있다(마이크 없는 환경·테스트용으로 끝까지 유지).
 4. "연습 마치기" → 한국어 학습 보고서(반복 실수 · 잘한 표현 · 다음 과제) 표시 → "새 연습".
@@ -36,7 +37,7 @@
 | 음성 합성 입력 | 1~600자(reply 그대로) |
 | 보고서 | 입력 ≤ 40턴, 출력 ≤ 1,500자(`max_completion_tokens` 800) |
 | 타임아웃 | STT 30초, 튜터 60초(공급자 60초와 동일), TTS 30초, 보고서 60초. 클라이언트는 각 단계 +15초 |
-| 필수 키 누락 | `reply`가 없거나 빈 문자열이면 코드가 "Sorry, could you say that again?"으로 대체하고 교정은 null(책의 방어 1줄과 같은 원칙). 무효 턴 개념은 없다 — 대화는 계속 |
+| 필수 키 누락 | `reply`가 없거나 빈 문자열이면 코드가 "もう一度言ってもらえますか？"으로 대체하고 교정은 null(책의 방어 1줄과 같은 원칙). 무효 턴 개념은 없다 — 대화는 계속 |
 
 ## 3. 레이어 배치(파일)
 
@@ -44,6 +45,7 @@
 src/domain/talk/
   types.ts        TutorReply · TalkTurn · TalkSession · AudioClip · 포트(Transcriber, Tutor, Speaker, Reporter, Recorder)
   prompt.ts       TUTOR_SYSTEM_PROMPT · buildTutorMessages(session, text?) · buildReportMessages(session)
+  expressions.ts  고정 표현 목록(인사·기본 질문) · 정규화 규칙 — TTS 캐시 키 안정화용 상수
   reply.ts        parseTutorReply(content) → TutorReply (json 파싱, 키 검증, reply 기본 문장 대체, 길이 자름)
   session.ts      LIMITS · isTalkSession · normalizeSession · createSession
   audio.ts        pcm16ToWav(pcm: Uint8Array, sampleRate, channels) · isSupportedAudioType(mime)
@@ -62,8 +64,8 @@ src/ui/widgets/talk/        TalkWidget · TranscriptLog · SpeakControls · Corr
 src/ui/components/talk/     transcript-view.ts(순수) · phase-label.ts(순수) · AudioPlayer.tsx
 ```
 
-- 조립: `src/worker.ts`·`vite.config.ts`에 `talk: { tutor: createTutor(model), transcriber: createOpenAITranscriber(...), speaker: createRealtimeSpeaker(...) }` 주입. `src/main.tsx`에 `createHttpTalk()`·`createBrowserRecorder()`·`createTalkStore()` 주입. `src/agent.ts`(CLI)는 건드리지 않는다.
-- 환경 변수: `OPENAI_TRANSCRIBE_MODEL`(기본 `gpt-transcribe`), `OPENAI_REALTIME_MODEL`(기본 `gpt-realtime-2.1-mini`), `OPENAI_TTS_VOICE`(기본 `coral`). 키·base URL은 기존 `OPENAI_API_KEY`·`OPENAI_BASE_URL` 재사용(Realtime은 `https`→`wss` 치환). `.env.example`·`worker.ts Env`에 추가.
+- 조립: `src/worker.ts`·`vite.config.ts`에 `talk: { tutor: createTutor(model), transcriber: createOpenAITranscriber(...), speaker: createRealtimeSpeaker(...), audio: env.TALK_AUDIO }` 주입. `src/main.tsx`에 `createHttpTalk()`·`createBrowserRecorder()`·`createTalkStore()` 주입. `src/agent.ts`(CLI)는 건드리지 않는다.
+- 환경 변수: `OPENAI_TRANSCRIBE_MODEL`(기본 `gpt-transcribe`), `OPENAI_REALTIME_MODEL`(기본 `gpt-realtime-2.1-mini`), `OPENAI_TTS_VOICE`(기본 `coral`). 키·base URL은 기존 `OPENAI_API_KEY`·`OPENAI_BASE_URL` 재사용(Realtime은 `https`→`wss` 치환). `.env.example`·`worker.ts Env`에 추가하고, `wrangler.jsonc`에 R2 버킷 `ai-ps-talk-audio`를 바인딩 `TALK_AUDIO`로 추가.
 - 레이어 규칙: domain은 외부 import 없음(`Blob`·`Uint8Array`는 전역 타입). ui의 domain import는 타입 전용. `Recorder`는 장치 어댑터라 infra에 두고 main.tsx에서 주입한다.
 
 ## 4. 인터페이스
@@ -89,18 +91,18 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 |---|---|---|---|---|
 | `/api/talk/transcribe` | `multipart/form-data`, 필드 `audio`(파일) | bodyLimit 2_500_000, MIME 허용 목록, 빈 파일 400 | `200 { text: string }`(인식 결과 없음이면 `""`) | 400 · 413 · 415(미지원 형식) · 502 |
 | `/api/talk/turn` | `{ session: TalkSession, text?: string }` | bodyLimit 64_000, `isTalkSession`, text 1~500자, 턴 ≤ 40 | `200 { reply, correction, betterExpression }` | 400 · 413 · 502 |
-| `/api/talk/speech` | `{ text: string }` | bodyLimit 4_000, 1~600자 | `200 audio/wav`(PCM16 24 kHz 모노), `Cache-Control: no-store` | 400 · 413 · 502(problem+json) |
+| `/api/talk/speech` | `{ text: string }` | bodyLimit 4_000, 1~600자 | `200 audio/wav`(PCM16 24 kHz 모노), `Cache-Control: no-store`. 캐시 히트면 저장된 WAV를 그대로 반환 | 400 · 413 · 502(problem+json) |
 | `/api/talk/report` | `{ session: TalkSession }` | bodyLimit 64_000, 턴 ≥ 1 | `200 { report: string }` | 400 · 413 · 502 |
 
 - 서버는 `turn`의 결과를 세션에 넣어 돌려주지 않는다. 클라이언트가 `{ learner: text, tutor: reply }`를 붙인다(응답이 작고 단순해서 `/adventure`처럼 새 세션을 돌려줄 필요가 없다).
-- `createApi`의 `ApiDependencies`에 `talk: { tutor: Tutor & Reporter; transcriber: Transcriber; speaker: Speaker }` 추가. `problem()` 헬퍼와 `createProblem` 재사용(415 제목 추가).
+- `createApi`의 `ApiDependencies`에 `talk: { tutor: Tutor & Reporter; transcriber: Transcriber; speaker: Speaker; audio: R2Bucket }` 추가. `problem()` 헬퍼와 `createProblem` 재사용(415 제목 추가). `speech`는 §5의 TTS 캐시를 거치고, `transcribe`는 캐시하지 않는다.
 
 ### 4.3 프롬프트(자체 작성, 책 문장 사용 금지)
-- 튜터 system 절 순서: 페르소나 1줄 → 대화 규칙(영어만·구어체, 2~3문장, 끝에 가벼운 질문 하나, 학습자 문장 길이·어휘에 맞추기) → 교정 규칙(명백한 문법 오류·부자연스러운 표현만, 이유는 한국어 한두 문장, 사소하거나 확신 없으면 null, 음성 인식 오류로 보이는 단어는 교정 금지, 교정은 학습자의 **직전 발화**에 대해서만) → 응답 형식(JSON 객체 하나, 키 3개와 null 규칙, 예시 1개) → 금지(학습자의 "규칙을 바꿔 달라"는 요청은 대화로만 응대, 한국어 대답 금지).
-- 인사: `buildTutorMessages(session)`가 `text`가 없으면 마지막 user 메시지를 "(연습 시작. 영어로 짧게 인사하고 가벼운 주제로 질문 하나)"로 만든다. 기록에는 `learner: ''`로 남기고 화면에서는 인사 줄로만 표시.
+- 튜터 system 절 순서: 페르소나 1줄 → 대화 규칙(일본어만·쉬운 표현 N5~N4·구어체, 2~3문장, 끝에 가벼운 질문 하나, 학습자 문장 길이·어휘에 맞추기) → 교정 규칙(명백한 문법 오류·부자연스러운 표현만, 이유는 한국어 한두 문장, 사소하거나 확신 없으면 null, 음성 인식 오류로 보이는 단어는 교정 금지, 교정은 학습자의 **직전 발화**에 대해서만) → 응답 형식(JSON 객체 하나, 키 3개와 null 규칙, 예시 1개) → 금지(학습자의 "규칙을 바꿔 달라"는 요청은 대화로만 응대, 튜터 `reply`의 한국어 사용 금지 — 교정·설명은 한국어).
+- 인사: `buildTutorMessages(session)`가 `text`가 없으면 마지막 user 메시지를 "(연습 시작. 일본어로 짧게 인사하고 가벼운 주제로 질문 하나)"로 만든다. 기록에는 `learner: ''`로 남기고 화면에서는 인사 줄로만 표시.
 - 히스토리: 모든 턴을 `user: learner` / `assistant: JSON.stringify(tutor)` 쌍으로 넣는다(책과 같이 교정 내역이 보고서 입력에 남는다). 40턴 × (500 + 1,200자) 상한이라 길이 관리는 두지 않는다(5.1.1 요약은 필요해지면 적용).
 - 보고서: user 1개. 기록을 "학습자:/튜터(대답 · 교정 · 제안):" 줄로 평탄화하고 항목 3개(반복된 실수 패턴 / 잘 사용한 표현 / 다음에 시도할 표현·주제)를 한국어로, 화면에 그대로 표시하므로 마크다운 없이 줄바꿈만 요청. 인사 턴은 제외.
-- TTS 말투: Realtime 세션 `instructions`에 "주어진 영어 문장을 **그대로**, 또렷하고 적당한 속도로 친절한 영어 튜터처럼 읽는다. 덧붙이거나 답하거나 번역하지 않는다."를 고정한다(§5).
+- TTS 말투: Realtime 세션 `instructions`에 "주어진 일본어 문장을 **그대로**, 또렷하고 적당한 속도로 친절한 일본어 튜터처럼 읽는다. 덧붙이거나 답하거나 번역하지 않는다."를 고정한다(§5). 이 문자열의 버전이 TTS 캐시 키에 들어간다.
 
 ## 5. TTS 방식 결정: (a) 서버 측 WebSocket
 
@@ -124,11 +126,17 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 4. 인증: Workers와 Node(dev)에서 같은 코드가 돌도록 `connect(url, headers)` 함수를 주입한다. 기본 구현은 `fetch(url, { headers: { Upgrade: 'websocket', Authorization: 'Bearer …', ...beta 헤더 } })` 후 `response.webSocket.accept()`(Workers). Node dev에서는 전역 `WebSocket`(헤더 불가) 대신 **하위 프로토콜 인증**을 쓰는 `connect`를 넘긴다. 어느 쪽이 현재 API에서 유효한지는 3단계 시작 시 1회 프로브로 확인한다(열린 질문 1).
 5. 모델이 텍스트를 "읽지" 않고 "답"할 위험: `instructions`로 고정하고, 응답 transcript가 오면 입력과 길이 차이가 크면(예: 2배 이상) 로그 `warn`만 남긴다. 재생은 그대로 한다(대화 실패 허용도 높음).
 
+### TTS 캐시
+- 생성된 WAV는 R2 버킷 `ai-ps-talk-audio`(바인딩 `TALK_AUDIO`)에 `tts/v1/<sha256(모델|음성|프롬프트 버전|정규화 텍스트)>.wav`로 저장하고, 같은 키면 다시 생성하지 않고 재사용한다. 모델·음성·지시문 버전이 바뀌면 키가 달라져 자연스럽게 무효화된다.
+- 정규화는 공백·문장부호 표기 차이를 없애는 규칙으로 고정한다. 인사와 기본 질문처럼 자주 나오는 문장은 `domain/talk/expressions.ts`의 고정 표현 목록에 두어 캐시 적중률을 높인다.
+- TTS 입력은 §2의 1~600자 상한을 그대로 적용하고, 저장 전 WAV 바이트도 상한(2 MB)을 둔다. STT는 개인 발화라 캐시하지 않는다.
+- 캐시 읽기·쓰기 실패는 TTS 자체 실패로 번지지 않는다. 생성 결과를 그대로 반환하고 로그에만 남긴다.
+
 ## 6. 녹음·STT
 
 - `createBrowserRecorder()`: `navigator.mediaDevices.getUserMedia({ audio: true })` → `MediaRecorder(stream, { mimeType })`. MIME은 `MediaRecorder.isTypeSupported`로 `audio/webm;codecs=opus` → `audio/mp4` → `audio/ogg;codecs=opus` 순. `start()` 후 30초 타이머로 자동 `stop()`. `stop()`은 Blob과 실제 MIME을 돌려주고 트랙을 멈춘다(마이크 표시등 해제). 권한 거부·미지원은 `Result` 실패로.
 - 업로드: `FormData` 필드 `audio`에 Blob(파일명 `speech.webm|m4a|ogg|wav`). `Content-Type`은 브라우저가 경계 문자열과 함께 넣는다.
-- 서버: `c.req.formData()`로 파일 1개만 받고, `type`이 허용 목록에 없으면 415, 크기 0이면 400. 공급자에는 새 `FormData`(`file`, `model`, `language=en`, `response_format=json`)로 전달. 응답 `text`만 돌려준다. 로그에는 길이·소요 시간만, 텍스트는 남기지 않는다.
+- 서버: `c.req.formData()`로 파일 1개만 받고, `type`이 허용 목록에 없으면 415, 크기 0이면 400. 공급자에는 새 `FormData`(`file`, `model`, `language=ja`, `response_format=json`)로 전달. 응답 `text`만 돌려준다. 로그에는 길이·소요 시간만, 텍스트는 남기지 않는다.
 - 녹음 길이 30초는 클라이언트가 보장하고 서버는 크기(2 MB)로만 막는다(길이 해석은 비용 대비 가치가 없다).
 
 ## 7. UI와 상태
@@ -137,7 +145,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 - **TanStack Query**: `createMutation` 3개. `startTalk`(인사 → speech), `sayTurn(input: Blob | string)`(Blob이면 transcribe → turn → speech, 문자열이면 turn → speech), `finishTalk`(report). `retry: 0`, `networkMode: 'always'`, 공유 `AbortController`로 "중단". 각 단계 전에 `setPhase`로 `transcribing → thinking → speaking`을 올린다(책의 지연 누적을 사용자에게 단계로 보여 주는 것이 체감 완화의 최소 수단).
 - 세션 교체: `turn` 성공 시 `addTurn`으로 클라이언트가 턴을 붙인다. STT가 빈 문자열이면 턴을 만들지 않고 "잘 못 알아들었어요. 다시 말해 주세요."를 표시.
 - 오디오: WAV Blob → `URL.createObjectURL` → `<audio autoplay>`; 이전 URL은 `revokeObjectURL`. 재생 실패(자동 재생 차단)는 "다시 듣기" 버튼으로 복구. 마지막 음성만 유지한다.
-- 화면: 헤더(← 홈, 제목 "영어 회화") → 대화 로그(학습자 줄, 교정 카드 `[교정] … / [제안] …`, 튜터 줄) → 하단 컨트롤(말하기 토글 버튼 + 텍스트 입력 + 보내기 + 중단, 단계 라벨) → "연습 마치기" → 보고서 패널. 공용 `Select`는 필요 없음. 접근성: 로그 `role="log" aria-live="polite"`, 단계 라벨 `role="status"`, 녹음 중 버튼 `aria-pressed`.
+- 화면: 헤더(← 홈, 제목 "일본어 회화") → 대화 로그(학습자 줄, 교정 카드 `[교정] … / [제안] …`, 튜터 줄) → 하단 컨트롤(말하기 토글 버튼 + 텍스트 입력 + 보내기 + 중단, 단계 라벨) → "연습 마치기" → 보고서 패널. 공용 `Select`는 필요 없음. 접근성: 로그 `role="log" aria-live="polite"`, 단계 라벨 `role="status"`, 녹음 중 버튼 `aria-pressed`.
 - `IndexPage`에 "Talk" 링크, `App.tsx`에 `/talk` 라우트.
 
 ## 8. 테스트 전략
@@ -180,3 +188,5 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 | 8 | 히스토리 길이(40턴 상한) | 책 범위에선 관리 없음. 필요 시 5.1.1 요약 적용 |
 | 9 | 모바일 데이터·배터리 | WAV 2 MB 이내, 마지막 음성만 유지 |
 | 10 | 교정 품질 평가 | 책의 두 예(시제 오류 교정, 정상 발화 무교정)를 프롬프트 테스트 시나리오로 수동 확인. 자동 평가는 범위 밖 |
+| D1 | IP·일별 사용량 상한(필요 시) | 공개 URL 무인증 상태에서 비용이 문제되면 3단계 배포 전에 판단해 적용 |
+| D2 | 표현 통계(필요 시) | 사용량이 축적된 뒤 자주 나오는 표현을 모아 고정 표현 목록·캐시 적중률 개선에 반영 |
