@@ -8,7 +8,13 @@ import type { PuzzleValidation, QueensPuzzle, QueensSolution, RegionId } from '.
 interface GeneratorOptions {
   place?: (size: number) => QueensSolution;
   log?: GenerationListener;
+  now?: () => number;
 }
+
+const CALL_TIMEOUT_MS = 180_000;
+// Leave time to deliver the final event before the browser's 300 s deadline.
+const GENERATION_TIMEOUT_MS = 290_000;
+const TIMEOUT_REASON = '퍼즐 생성 제한 시간(290초)을 초과했습니다. 재시도를 중단합니다.';
 
 function invalid(message: string): PuzzleValidation {
   return { valid: false, solutionStatus: 'invalid', solutions: [], nodesVisited: 0,
@@ -57,10 +63,15 @@ function userPrompt(size: number, solution: QueensSolution): string {
 
 export function createQueensGenerator(model: CompletionGateway, options: GeneratorOptions = {}): QueensGenerator {
   const place = options.place ?? ((size: number) => createRandomSolution(size, Math.random));
+  const now = options.now ?? (() => performance.now());
   return {
     async generate(size, onEvent, signal) {
       if (!Number.isInteger(size) || size < 5 || size > 9) return { ok: false, reason: '격자 크기는 5부터 9까지의 정수여야 합니다.' };
       if (signal?.aborted) return { ok: false, reason: '퍼즐 생성을 중단했습니다.' };
+      const deadline = AbortSignal.timeout(GENERATION_TIMEOUT_MS);
+      const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      const expiresAt = now() + GENERATION_TIMEOUT_MS;
+      const expired = () => deadline.aborted || now() >= expiresAt;
       const emit: GenerationListener = (event) => { options.log?.(event); onEvent?.(event); };
       const stop = (reason: string, attempt: number) => {
         emit({ kind: 'stopped', attempt, reason });
@@ -76,9 +87,15 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
       ];
       for (let attempt = 1; attempt <= MAX_QUEENS_RETRIES + 1; attempt++) {
         if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
+        const remainingMs = Math.ceil(expiresAt - now());
+        if (deadline.aborted || remainingMs <= 0) return stop(TIMEOUT_REASON, attempt);
         emit({ kind: 'attempt', attempt, retry: attempt - 1 });
-        const response = await model.complete(messages, { response_format: { type: 'json_object' }, signal });
+        const response = await model.complete(messages, {
+          response_format: { type: 'json_object' }, signal: requestSignal,
+          timeoutMs: Math.min(CALL_TIMEOUT_MS, remainingMs),
+        });
         if (signal?.aborted) return stop('퍼즐 생성을 중단했습니다.', attempt);
+        if (expired()) return stop(TIMEOUT_REASON, attempt);
         if (!response.ok) return stop(response.reason, attempt);
 
         const content = response.value.content ?? '';
@@ -95,6 +112,7 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
           ? validateDesign({ size, regions: regions as RegionId[][] }, solution)
           : invalid('응답이 {"regions": [...]} 형태의 JSON이 아닙니다. 크기에 맞는 영역 행렬만 출력하세요.');
         emit({ kind: 'validation', attempt, report });
+        if (expired()) return stop(TIMEOUT_REASON, attempt);
 
         if (report.valid && report.solutionStatus === 'unique') {
           emit({ kind: 'complete', attempt });
@@ -108,7 +126,7 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
         messages.push({ role: 'user', content: `The region design failed validation. Fix every issue below and return the full ${size}×${size} regions matrix as JSON.\n${feedback}` });
         emit({ kind: 'feedback', attempt, message: feedback });
       }
-      return stop(`최초 생성과 ${MAX_QUEENS_RETRIES}회 재시도 후에도 유일한 정답을 가진 퍼즐을 만들지 못했습니다.`, MAX_QUEENS_RETRIES + 1);
+      return stop(expired() ? TIMEOUT_REASON : `최초 생성과 ${MAX_QUEENS_RETRIES}회 재시도 후에도 유일한 정답을 가진 퍼즐을 만들지 못했습니다.`, MAX_QUEENS_RETRIES + 1);
     },
   };
 }

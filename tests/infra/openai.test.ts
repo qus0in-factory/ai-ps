@@ -173,6 +173,46 @@ describe('Given untrusted completion provider failures', () => {
 });
 
 describe('Given a completion caller cancellation signal', () => {
+  for (const withCaller of [false, true]) {
+    it(`When the default deadline expires ${withCaller ? 'with' : 'without'} a caller signal Then distinguishes it from a network failure`, async t => {
+      const deadline = new AbortController();
+      const logs: unknown[] = [];
+      t.mock.method(console, 'error', (entry: unknown) => logs.push(entry));
+      t.mock.method(AbortSignal, 'timeout', (ms: number) => {
+        assert.equal(ms, 60_000);
+        return deadline.signal;
+      });
+      const result = await completion({ model: 'test', messages: [] }, {
+        apiKey: 'test', signal: withCaller ? new AbortController().signal : undefined,
+        fetcher: async (_url, init) => {
+          deadline.abort(new DOMException('deadline', 'TimeoutError'));
+          init!.signal!.throwIfAborted();
+          throw new Error('Must have aborted');
+        },
+      });
+      assert.deepEqual(result, { ok: false, reason: '모델 응답 시간이 초과되었습니다.' });
+      assert.equal((logs[0] as { code: string }).code, 'provider_timeout');
+    });
+  }
+
+  for (const nativeSignature of [false, true]) {
+    it(`When a longer timeout is supplied through ${nativeSignature ? 'native' : 'plain'} options Then applies it locally without sending it to the provider`, async t => {
+      const durations: number[] = [];
+      t.mock.method(AbortSignal, 'timeout', (ms: number) => {
+        durations.push(ms);
+        return new AbortController().signal;
+      });
+      const model = createOpenAICompletion({ model: 'test', apiKey: 'test', fetcher: async (_url, init) => {
+        assert.equal('timeoutMs' in JSON.parse(String(init?.body)), false);
+        return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+      } });
+      const options = { timeoutMs: 180_000 };
+      const result = nativeSignature ? await model.complete([], [], options) : await model.complete([], options);
+      assert.equal(result.ok, true);
+      assert.deepEqual(durations, [180_000]);
+    });
+  }
+
   it('When a caller signal is supplied Then also enforces the 60 second deadline', async t => {
     const caller = new AbortController();
     const deadline = new AbortController();

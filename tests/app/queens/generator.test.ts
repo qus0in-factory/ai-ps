@@ -47,8 +47,60 @@ describe('Given a Queens generator where code places queens and the LLM designs 
       return answer(JSON.stringify({ regions: unique }));
     } }, { place });
     assert.equal((await generator.generate(5)).ok, true);
-    assert.deepEqual(Object.keys(options ?? {}).sort(), ['response_format', 'signal']);
+    assert.deepEqual(Object.keys(options ?? {}).sort(), ['response_format', 'signal', 'timeoutMs']);
     assert.deepEqual(options?.response_format, { type: 'json_object' });
+    assert.equal(options?.timeoutMs, 180_000);
+  });
+  it('When designing nine regions Then uses the longer Queens timeout', async () => {
+    let options: CompletionOptions | undefined;
+    const generator = createQueensGenerator({ complete: async (_messages, value) => {
+      options = value;
+      return { ok: false, reason: 'measurement stub' };
+    } });
+    await generator.generate(9);
+    assert.equal(options?.timeoutMs, 180_000);
+  });
+  it('When retrying after a slow design Then caps the next call at the remaining overall budget', async () => {
+    let elapsed = 0;
+    const limits: number[] = [];
+    const events: GenerationEvent[] = [];
+    const generator = createQueensGenerator({ complete: async (_messages, options) => {
+      limits.push(options!.timeoutMs!);
+      elapsed += limits.length === 1 ? 170_000 : 120_000;
+      return answer(JSON.stringify({ regions: multiple }));
+    } }, { place, now: () => elapsed });
+    const result = await generator.generate(5, event => events.push(event));
+    assert.deepEqual(limits, [180_000, 120_000]);
+    assert.deepEqual(result, { ok: false, reason: '퍼즐 생성 제한 시간(290초)을 초과했습니다. 재시도를 중단합니다.' });
+    assert.equal(events.at(-1)?.kind, 'stopped');
+  });
+  it('When validation feedback uses the remaining time Then stops before starting another model call', async () => {
+    let elapsed = 0;
+    let calls = 0;
+    const generator = createQueensGenerator({ complete: async () => {
+      calls++;
+      return answer(JSON.stringify({ regions: multiple }));
+    } }, { place, now: () => elapsed });
+    const result = await generator.generate(5, event => {
+      if (event.kind === 'feedback') elapsed = 290_000;
+    });
+    assert.equal(calls, 1);
+    assert.deepEqual(result, { ok: false, reason: '퍼즐 생성 제한 시간(290초)을 초과했습니다. 재시도를 중단합니다.' });
+  });
+  it('When the overall deadline expires during a retry Then aborts the request and explains the generation budget', async t => {
+    const deadline = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => {
+      assert.equal(ms, 290_000);
+      return deadline.signal;
+    });
+    const generator = createQueensGenerator({ complete: async (_messages, options) => {
+      deadline.abort(new DOMException('deadline', 'TimeoutError'));
+      assert.equal(options?.signal?.aborted, true);
+      return { ok: false, reason: '모델 응답 시간이 초과되었습니다.' };
+    } }, { place });
+    assert.deepEqual(await generator.generate(5), {
+      ok: false, reason: '퍼즐 생성 제한 시간(290초)을 초과했습니다. 재시도를 중단합니다.',
+    });
   });
   it('When the reply is not a regions JSON Then gives grid feedback and retries', async () => {
     let calls = 0;

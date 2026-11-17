@@ -3,7 +3,7 @@ import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
 
 // Provider diagnostics are untrusted: never reuse them as a public failure reason.
-function logCompletionError(message: string, apiKey: string | undefined, status?: number, debug = false) {
+function logCompletionError(message: string, apiKey: string | undefined, status?: number, debug = false, timedOut = false) {
   const key = apiKey?.trim();
   const redacted = (key ? message.split(key).join('[REDACTED]') : message)
     .replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]')
@@ -14,7 +14,7 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .slice(0, 512);
   try {
-    const entry = { event: 'completion_error', code: status === undefined ? 'provider_connection_error' : 'provider_http_error', ...(status === undefined ? {} : { status }) };
+    const entry = { event: 'completion_error', code: timedOut ? 'provider_timeout' : status === undefined ? 'provider_connection_error' : 'provider_http_error', ...(status === undefined ? {} : { status }) };
     console.error(entry);
     if (debug) console.debug({ ...entry, message: redacted });
   } catch {
@@ -24,15 +24,18 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
 
 export async function completion(
   params: CompletionParams,
-  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; fetcher?: typeof fetch; debugErrors?: boolean } = {},
+  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch; debugErrors?: boolean } = {},
 ): Promise<Result<CompletionResponse>> {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+  let signal: AbortSignal | undefined;
   try {
     if (!apiKey?.trim()) {
       return { ok: false, reason: '모델 API 키가 설정되지 않았습니다.' };
     }
 
     const baseUrl = (options.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const timeout = AbortSignal.timeout(options.timeoutMs ?? 60_000);
+    signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const response = await (options.fetcher ?? fetch)(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -40,9 +43,7 @@ export async function completion(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ ...params, stream: false }),
-      signal: options.signal
-        ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
-        : AbortSignal.timeout(60_000),
+      signal,
     });
 
     if (!response.ok) {
@@ -62,8 +63,10 @@ export async function completion(
 
     return { ok: true, value: (await response.json()) as CompletionResponse };
   } catch (error) {
-    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey, undefined, options.debugErrors === true);
-    return { ok: false, reason: '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.' };
+    const timedOut = (signal?.aborted && signal.reason?.name === 'TimeoutError') ||
+      (error instanceof Error && error.name === 'TimeoutError');
+    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey, undefined, options.debugErrors === true, timedOut);
+    return { ok: false, reason: timedOut ? '모델 응답 시간이 초과되었습니다.' : '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.' };
   }
 }
 
@@ -90,7 +93,7 @@ export function createOpenAICompletion(
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const } : {}),
         ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
       }, {
-        debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal,
+        debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,
       });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;

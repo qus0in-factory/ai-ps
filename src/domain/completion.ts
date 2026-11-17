@@ -33,6 +33,7 @@ export interface CompletionOptions {
   tool_choice?: { type: 'function'; function: { name: string } };
   parallel_tool_calls?: boolean;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface CompletionParams {
