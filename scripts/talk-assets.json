@@ -1,0 +1,45 @@
+{
+  "api": {
+    "keyEnv": "OPENAI_API_KEY",
+    "baseUrlEnv": "OPENAI_IMAGE_BASE_URL",
+    "defaultBaseUrl": "https://api.openai.com/v1",
+    "size": "1024x1024",
+    "model": "gpt-image-2.6-flare"
+  },
+  "promptPrefix": "8-bit pixel art sprite sheet, strict 16-color palette, hard pixel edges, no anti-aliasing, no gradients, no text, no watermark, plain solid #FF00FF background, 3 columns by 2 rows grid of six equal panels, generous magenta gutters between panels, each panel centered subject filling 80%, same character and outfit in every panel, same lighting and outline thickness.",
+  "paletteColors": "#F7F1E3,#E8DCC8,#C9B79C,#8B5A2B,#5C3A1E,#1F1B16,#3A2F25,#5C4A3A,#F5D6B3,#E8B88A,#C98A5E,#A7C7E7,#2E4A6B,#7FAF8A,#000000,#FFFFFF",
+  "assets": [
+    {
+      "name": "tutor-f-sheet",
+      "purpose": "여성 일본어 튜터 표정 시트 (6종)",
+      "sheet": true,
+      "grid": "3x2",
+      "final": 1024,
+      "subject": "friendly Japanese language tutor, young adult woman in her late 20s, shoulder-length dark hair, light cardigan over a white blouse, gentle eyes. Six upper-body portrait expressions in fixed order: top row left-to-right neutral (calm friendly), smile (praising), think (listening, hand on chin); bottom row left-to-right surprised (wide eyes), encourage (bright wink smile), confused (puzzled). Same person, same outfit, same framing in every panel. No text labels.",
+      "slices": [
+        { "name": "tutor-f-neutral", "cell": 0, "final": 64, "purpose": "기본" },
+        { "name": "tutor-f-smile", "cell": 1, "final": 64, "purpose": "칭찬" },
+        { "name": "tutor-f-think", "cell": 2, "final": 64, "purpose": "생각 중/듣는 중" },
+        { "name": "tutor-f-surprised", "cell": 3, "final": 64, "purpose": "놀람" },
+        { "name": "tutor-f-encourage", "cell": 4, "final": 64, "purpose": "격려" },
+        { "name": "tutor-f-confused", "cell": 5, "final": 64, "purpose": "못 알아들음" }
+      ]
+    },
+    {
+      "name": "tutor-m-sheet",
+      "purpose": "남성 일본어 튜터 표정 시트 (6종)",
+      "sheet": true,
+      "grid": "3x2",
+      "final": 1024,
+      "subject": "friendly Japanese language tutor, young adult man in his late 20s, short dark hair, button-up shirt with a light cardigan, gentle eyes. Six upper-body portrait expressions in fixed order: top row left-to-right neutral (calm friendly), smile (praising), think (listening, hand on chin); bottom row left-to-right surprised (wide eyes), encourage (bright wink smile), confused (puzzled). Same person, same outfit, same framing in every panel. No text labels.",
+      "slices": [
+        { "name": "tutor-m-neutral", "cell": 0, "final": 64, "purpose": "기본" },
+        { "name": "tutor-m-smile", "cell": 1, "final": 64, "purpose": "칭찬" },
+        { "name": "tutor-m-think", "cell": 2, "final": 64, "purpose": "생각 중/듣는 중" },
+        { "name": "tutor-m-surprised", "cell": 3, "final": 64, "purpose": "놀람" },
+        { "name": "tutor-m-encourage", "cell": 4, "final": 64, "purpose": "격려" },
+        { "name": "tutor-m-confused", "cell": 5, "final": 64, "purpose": "못 알아들음" }
+      ]
+    }
+  ]
+}

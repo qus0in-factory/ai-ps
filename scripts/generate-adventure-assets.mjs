@@ -7,18 +7,18 @@ import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
-const manifest = JSON.parse(await readFile(path.join(here, 'adventure-assets.json'), 'utf8'));
+// manifest path is resolved after parsing args (see main)
 
 function fail(message) { throw new Error(message); }
 
 function parseArgs(args) {
   const options = { only: undefined, model: undefined, label: undefined, reuse: undefined, reference: undefined,
-    rawOut: '/tmp/adventure-assets/raw', finalOut: 'public/adventure', attempts: 2, dryRun: false };
+    manifest: 'adventure-assets.json', rawOut: '/tmp/adventure-assets/raw', finalOut: 'public/adventure', attempts: 2, dryRun: false };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--dry-run') { options.dryRun = true; continue; }
     const name = { '--only': 'only', '--model': 'model', '--label': 'label', '--reuse': 'reuse',
-      '--reference': 'reference', '--raw-out': 'rawOut', '--final-out': 'finalOut', '--attempts': 'attempts' }[flag];
+      '--reference': 'reference', '--manifest': 'manifest', '--raw-out': 'rawOut', '--final-out': 'finalOut', '--attempts': 'attempts' }[flag];
     if (!name) fail(`unknown option: ${flag}`);
     const value = args[++i];
     if (!value || value.startsWith('--')) fail(`missing value for ${flag}`);
@@ -76,6 +76,8 @@ async function imageBytes(text, baseUrl, apiKey) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const manifestPath = path.isAbsolute(options.manifest) ? options.manifest : path.join(here, options.manifest);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const asset = manifest.assets.find(entry => entry.name === options.only);
   if (!asset) fail(`unknown asset: ${options.only}`);
   const model = options.model ?? manifest.api.model;
@@ -116,10 +118,26 @@ async function main() {
   }
 
   const started = Date.now();
-  const output = execFileSync('python3', ['-I', path.join(here, 'adventure-postprocess.py'),
-    rawPath, finalPath, String(asset.final), '--palette', palettePath, ...(asset.opaque ? ['--opaque'] : [])], { encoding: 'utf8' });
-  console.log(output.trim());
-  console.log(`FINAL ${finalPath} (${(await readFile(finalPath)).length} bytes)`);
+  const paletteArgs = manifest.paletteColors ? ['--palette-colors', manifest.paletteColors] : [];
+  if (asset.sheet) {
+    const grid = asset.grid ?? '3x2';
+    const slices = asset.slices ?? [];
+    for (const slice of slices) {
+      const sliceFinalPath = path.resolve(root, options.finalOut, `${slice.name}.png`);
+      const out = execFileSync('python3', ['-I', path.join(here, 'adventure-postprocess.py'),
+        rawPath, sliceFinalPath, String(slice.final ?? asset.final), '--palette', palettePath,
+        '--grid', grid, '--cell', String(slice.cell ?? 0), ...paletteArgs,
+        ...(slice.opaque ? ['--opaque'] : [])], { encoding: 'utf8' });
+      console.log(out.trim());
+      console.log(`FINAL ${sliceFinalPath} (${(await readFile(sliceFinalPath)).length} bytes)`);
+    }
+  } else {
+    const output = execFileSync('python3', ['-I', path.join(here, 'adventure-postprocess.py'),
+      rawPath, finalPath, String(asset.final), '--palette', palettePath, ...paletteArgs,
+      ...(asset.opaque ? ['--opaque'] : [])], { encoding: 'utf8' });
+    console.log(output.trim());
+    console.log(`FINAL ${finalPath} (${(await readFile(finalPath)).length} bytes)`);
+  }
   console.log(`ELAPSED_MS ${Date.now() - started}`);
 }
 

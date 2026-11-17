@@ -22,14 +22,24 @@ PALETTE = [
 ]
 
 
+def parse_palette_colors(spec):
+    if not spec:
+        return PALETTE
+    colors = [item.strip() for item in spec.split(',') if item.strip()]
+    if len(colors) != 16:
+        raise ValueError(f"palette must have 16 colors, got {len(colors)}")
+    return colors
+
+
 def rgb(value):
     value = value.lstrip("#")
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def palette_image(path):
+def palette_image(path, colors=None):
+    colors = colors or PALETTE
     image = Image.new("P", (16, 1))
-    flat = [channel for color in PALETTE for channel in rgb(color)]
+    flat = [channel for color in colors for channel in rgb(color)]
     image.putpalette(flat)
     if path:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -103,21 +113,7 @@ def corner_background_mask(image, tolerance, scale=4):
     return mask.resize((width, height), Image.Resampling.NEAREST)
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source")
-    parser.add_argument("output")
-    parser.add_argument("size", type=int, choices=(16, 32, 48, 64, 96, 180, 192, 512))
-    parser.add_argument("--palette", default=None, help="palette.png 경로(주면 갱신한다)")
-    parser.add_argument("--tolerance", type=int, default=48)
-    parser.add_argument("--flood-fill", action="store_true", help="모서리 4곳에서 연결된 배경 제거")
-    parser.add_argument("--flood-tolerance", type=int, default=30)
-    parser.add_argument("--palette-swap", default=None, help="from=to hex 쌍을 쉼표로 구분(알파 보존)")
-    parser.add_argument("--opaque", action="store_true", help="배경을 투명하게 키잉하지 않고 불투명하게 유지(파비콘용)")
-    args = parser.parse_args(argv)
-
-    source = Image.open(args.source).convert("RGBA")
-    palette = palette_image(args.palette)
+def process_image(source, args, palette):
     if args.opaque:
         mapped = source.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
         mapped.putalpha(Image.new("L", source.size, 255))
@@ -142,6 +138,62 @@ def main(argv=None):
         mapped.putalpha(alpha)
         result = mapped.resize((args.size, args.size), Image.Resampling.NEAREST)
         mode = f"keyed={'yes' if keyed else 'no'} flood-fill={'yes' if flooded else 'no'} palette=16 colors dither=none"
+    return result, mode
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source")
+    parser.add_argument("output")
+    parser.add_argument("size", type=int, choices=(16, 32, 48, 64, 96, 180, 192, 512))
+    parser.add_argument("--palette", default=None, help="palette.png 경로(주면 갱신한다)")
+    parser.add_argument("--palette-colors", default=None, help="쉼표로 구분한 16개 hex 색(팔레트 지정)")
+    parser.add_argument("--tolerance", type=int, default=48)
+    parser.add_argument("--flood-fill", action="store_true", help="모서리 4곳에서 연결된 배경 제거")
+    parser.add_argument("--flood-tolerance", type=int, default=30)
+    parser.add_argument("--palette-swap", default=None, help="from=to hex 쌍을 쉼표로 구분(알파 보존)")
+    parser.add_argument("--opaque", action="store_true", help="배경을 투명하게 키잉하지 않고 불투명하게 유지(파비콘용)")
+    parser.add_argument("--grid", default=None, help="COLSxROWS (예: 3x2). source를 격자로 잘라 처리")
+    parser.add_argument("--cell", type=int, default=None, help="--grid 사용 시 처리할 셀 인덱스(0부터)")
+    args = parser.parse_args(argv)
+
+    colors = parse_palette_colors(args.palette_colors)
+    source = Image.open(args.source).convert("RGBA")
+    palette = palette_image(args.palette, colors)
+
+    if args.grid:
+        cols, rows = (int(part) for part in args.grid.lower().split('x'))
+        cell_width = source.width // cols
+        cell_height = source.height // rows
+        cells = []
+        for row in range(rows):
+            for col in range(cols):
+                left = col * cell_width
+                top = row * cell_height
+                right = left + cell_width if col < cols - 1 else source.width
+                bottom = top + cell_height if row < rows - 1 else source.height
+                cells.append(source.crop((left, top, right, bottom)))
+        if args.cell is None:
+            for index, cell in enumerate(cells):
+                result, mode = process_image(cell, args, palette)
+                output = args.output
+                stem, ext = os.path.splitext(output)
+                output = f"{stem}-{index}{ext}"
+                os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+                result.save(output)
+                print(f"POSTPROCESS {os.path.basename(args.source)} cell {index} -> {os.path.basename(output)} "
+                      f"({args.size}x{args.size}) {mode} resize=NEAREST")
+            return 0
+        if args.cell < 0 or args.cell >= len(cells):
+            raise ValueError(f"cell index out of range: {args.cell}")
+        result, mode = process_image(cells[args.cell], args, palette)
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        result.save(args.output)
+        print(f"POSTPROCESS {os.path.basename(args.source)} cell {args.cell} -> {os.path.basename(args.output)} "
+              f"({args.size}x{args.size}) {mode} resize=NEAREST")
+        return 0
+
+    result, mode = process_image(source, args, palette)
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     result.save(args.output)
     print(f"POSTPROCESS {os.path.basename(args.source)} -> {os.path.basename(args.output)} "
