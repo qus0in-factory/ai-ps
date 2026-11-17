@@ -8,20 +8,19 @@ const reply = { mood: 'neutral' as const, reply: '元気ですか？', correctio
 const deps = { mood: 'neutral' as const, reply: async () => ({ ok: true as const, value: 'unused' }), queens: { generate: async () => ({ ok: false as const, reason: 'unused' }) }, adventure: { start: async () => ({ ok: false as const, reason: 'unused' }), turn: async () => ({ ok: false as const, reason: 'unused' }) } };
 
 describe('Given the Talk JSON endpoints', () => {
-  it('When greeting, talking and reporting Then returns only the contract JSON and no speech route', async () => {
+  it('When greeting, talking and reporting Then returns only the contract JSON', async () => {
     let calls = 0;
     const api = createApi({ ...deps, talk: { tutor: createTutor({ complete: async (_messages, options) => {
       calls++; return { ok: true, value: { role: 'assistant', content: options?.response_format ? JSON.stringify(reply) : '잘한 표현: 인사' } };
     } }) } });
     const post = (path: string, body: unknown) => api.request('/api/talk/' + path, { method: 'POST', body: JSON.stringify(body) });
     const session = createSession();
-    const greeting = await post('turn', { session }); assert.equal(greeting.status, 200); assert.deepEqual(await greeting.json(), { ...reply, reply: TALK_FIXED_PHRASES.greeting });
+    const greeting = await post('turn', { session }); assert.equal(greeting.status, 200); assert.deepEqual(await greeting.json(), { ...reply, mood: 'smile', reply: TALK_FIXED_PHRASES.greeting });
     assert.match(greeting.headers.get('Content-Type')!, /application\/json/); assert.equal(greeting.headers.get('Cache-Control'), 'no-store');
     session.turns.push({ learner: '', tutor: reply });
     assert.equal((await post('turn', { session, text: 'Hi' })).status, 200);
     const report = await post('report', { session }); assert.deepEqual(await report.json(), { report: '잘한 표현: 인사' });
-    assert.equal(calls, 3);
-    assert.equal((await post('speech', {})).status, 404);
+    assert.equal(calls, 2);
   });
   it('When malformed, deep, over-limit or wrong-method requests arrive Then returns RFC 9457 before model calls', async () => {
     let calls = 0;
@@ -49,7 +48,7 @@ describe('Given the Talk JSON endpoints', () => {
   it('When the provider fails or the request aborts Then returns a safe terminal 502', async () => {
     const controller = new AbortController();
     const api = createApi({ ...deps, talk: { tutor: createTutor({ complete: async () => { controller.abort(); return { ok: false, reason: 'SECRET_KEY raw prompt' }; } }) } });
-    const response = await api.request('/api/talk/turn', { method: 'POST', body: JSON.stringify({ session: createSession() }), signal: controller.signal });
+    const response = await api.request('/api/talk/turn', { method: 'POST', body: JSON.stringify({ session: createSession(), text: 'こんにちは。' }), signal: controller.signal });
     assert.equal(response.status, 502); assert.ok(!(await response.text()).includes('SECRET_KEY'));
   });
 });

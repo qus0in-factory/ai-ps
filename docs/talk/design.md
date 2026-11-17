@@ -135,12 +135,17 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 
 ## 6. 녹음·STT
 
-- `createBrowserRecorder()`: `navigator.mediaDevices.getUserMedia({ audio: true })` → `MediaRecorder(stream, { mimeType })`. MIME은 `MediaRecorder.isTypeSupported`로 `audio/webm;codecs=opus` → `audio/mp4` → `audio/ogg;codecs=opus` 순. `start()` 후 30초 타이머로 자동 `stop()`. `stop()`은 Blob과 실제 MIME을 돌려주고 트랙을 멈춘다(마이크 표시등 해제). 권한 거부·미지원은 `Result` 실패로.
+- **2단계 b 확정 동작**: 녹음 정지(30초 자동 정지 포함) → 받아쓰기 → 입력창에 추가. 사용자가 확인·수정한 뒤 보내며 자동으로 튜터를 호출하지 않는다. 녹음·받아쓰기 중에도 텍스트 편집은 가능하고, 중간에 적은 내용은 보존한다. 합산 500자 초과·빈 받아쓰기·실패는 기존 입력을 유지하며 한국어 안내를 표시한다. 취소·화면 이탈 시 마이크 트랙을 해제하고 늦은 응답을 무시한다.
+- `domain/talk/recording.ts`의 Recorder는 `start(onComplete, onElapsed?)`, `stop(): Promise<Result<Blob>>`, `cancel()`, `supported`를 제공한다. `main.tsx`에서 브라우저 구현을 주입하며, `app/talk/recording.ts`가 녹음·받아쓰기 전이를 관리한다. 브라우저 STT 요청 기한은 45초다.
+
+- `createBrowserRecorder()`: `navigator.mediaDevices.getUserMedia({ audio: true })` → `MediaRecorder(stream, { mimeType })`. MIME은 `MediaRecorder.isTypeSupported`로 `audio/webm;codecs=opus` → `audio/mp4` → `audio/ogg;codecs=opus` → `audio/wav` 순. `start()` 후 30초 타이머로 자동 `stop()`. `stop()`은 Blob과 실제 MIME을 돌려주고 트랙을 멈춘다(마이크 표시등 해제). 권한 거부·미지원은 `Result` 실패로.
 - 업로드: `FormData` 필드 `audio`에 Blob(파일명 `speech.webm|m4a|ogg|wav`). `Content-Type`은 브라우저가 경계 문자열과 함께 넣는다.
 - 서버: `c.req.formData()`로 파일 1개만 받고, `type`이 허용 목록에 없으면 415, 크기 0이면 400. 공급자에는 새 `FormData`(`file`, `model`, `language=ja`, `response_format=json`)로 전달. 응답 `text`만 돌려준다. 로그에는 길이·소요 시간만, 텍스트는 남기지 않는다.
 - 녹음 길이 30초는 클라이언트가 보장하고 서버는 크기(2 MB)로만 막는다(길이 해석은 비용 대비 가치가 없다).
 
 ## 7. UI와 상태
+
+- **3단계 c 확정 동작**: 인사를 포함한 각 튜터 문장에 듣기 버튼을 제공한다. 클릭한 문장만 `/api/talk/speech`로 받아 HTMLAudioElement로 재생하며, 새 응답의 자동 요청·자동 재생은 하지 않는다. 400자 초과는 비활성화한다. 문장별 object URL Map을 연습 화면의 메모리에 유지해 반복 재생 시 재요청하지 않는다. 다른 문장을 누르면 이전 요청·재생을 중단하고 새 연습·화면 이탈 때 URL을 해제한다. 재생 실패는 해당 말풍선에만 한국어로 표시한다. 녹음을 시작하면 재생을 정지하고 녹음 중에는 듣기를 비활성화한다.
 
 - 1단계 튜터 선택: 시작 전 여성/남성 초상 카드 버튼(`aria-pressed`)으로 선택하고 `session.tutor`에 저장한다. 세션 진행 중에는 바꾸지 않으며 새 연습에서 다시 선택한다. 기존 v1 기록에 tutor/mood가 없으면 각각 `f`/`neutral`로 복원한다. 명시적으로 잘못된 세션 enum은 서버에서 거부하고 모델의 누락/잘못된 mood는 `neutral`로 보정한다.
 - 현재 표정은 마지막 응답 mood, 요청 대기 중에는 `think`. `public/talk/tutor-<f|m>-<mood>.png`를 `image-rendering: pixelated`로 확대한다. 인사와 파싱 실패 대체 문구는 `speech-cache.ts`의 `TALK_FIXED_PHRASES.greeting/repeat`와 정확히 일치한다. 성공한 인사 응답은 서버에서 고정 문구로 확정한다.

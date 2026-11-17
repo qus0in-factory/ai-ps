@@ -1,6 +1,7 @@
-import type { TalkLogEntry, TalkLogListener } from '../domain/talk/logging.ts';
+import type { Logger } from 'pino';
+import type { TalkLogListener } from '../domain/talk/logging.ts';
 
-export function createTalkLogger(logger: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void }): TalkLogListener {
+export function createTalkLogger(logger: Pick<Logger, 'info' | 'warn'>): TalkLogListener {
   return entry => {
     const level = entry.ok ? 'info' : 'warn';
     logger[level]({ component: 'talk', event: entry.event, ok: entry.ok, ms: entry.ms,
@@ -10,6 +11,9 @@ export function createTalkLogger(logger: { info: (...args: unknown[]) => void; w
       ...(entry.reportChars === undefined ? {} : { reportChars: entry.reportChars }),
       ...(entry.inputBytes === undefined ? {} : { inputBytes: entry.inputBytes }),
       ...(entry.outputChars === undefined ? {} : { outputChars: entry.outputChars }),
+      ...(entry.cache === undefined ? {} : { cache: entry.cache }),
+      ...(entry.inputChars === undefined ? {} : { inputChars: entry.inputChars }),
+      ...(entry.outputBytes === undefined ? {} : { outputBytes: entry.outputBytes }),
     }, 'Talk 진행');
   };
 }

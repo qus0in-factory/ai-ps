@@ -1,7 +1,7 @@
 import type { TalkPhase } from '../../../domain/talk/types.ts';
 import { atLimit, canSend, type TalkView } from '../../../app/talk/session-store.ts';
 export function phaseLabel(phase: TalkPhase): string {
-  return { idle: '준비되었어요', thinking: '튜터가 답을 준비하고 있어요…', reporting: '학습 보고서를 만들고 있어요…', ended: '오늘의 연습 완료' }[phase];
+  return { 'requesting-microphone': '마이크 권한을 확인하고 있어요…', recording: '녹음 중이에요. 끝나면 정지를 눌러주세요.', transcribing: '일본어를 받아쓰고 있어요…', idle: '준비되었어요', thinking: '튜터가 답을 준비하고 있어요…', reporting: '학습 보고서를 만들고 있어요…', ended: '오늘의 연습 완료' }[phase];
 }
 export function draftHint(view: TalkView): string {
   if (atLimit(view)) return '기록 한도에 도달했어요. 연습을 마치고 보고서를 받아보세요.';

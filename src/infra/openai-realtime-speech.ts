@@ -18,7 +18,7 @@ export interface SpeechWarning {
 }
 
 /** Workers upgrade transport; Node callers inject a header-capable WebSocket connector. */
-const connectWorkers: RealtimeConnect = async (url, headers, signal) => {
+export const connectWorkers: RealtimeConnect = async (url, headers, signal) => {
   const response = await fetch(url.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'), {
     headers: { ...headers, Upgrade: 'websocket' }, signal,
   }) as Response & { webSocket?: RealtimeSocket };

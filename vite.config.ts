@@ -19,20 +19,29 @@ import { createApi } from './src/ui/http/api.ts';
 import { createTutor } from './src/app/talk/tutor.ts';
 import { createOpenAITranscriber } from './src/infra/openai-transcribe.ts';
 import { createTalkLogger } from './src/infra/talk-logger.ts';
+import { createCachedSpeaker } from './src/app/talk/cached-speaker.ts';
+import { createMemoryAudioCache } from './src/infra/memory-audio-cache.ts';
+import { createRealtimeSpeaker, REALTIME_SPEECH_PROMPT_VERSION } from './src/infra/openai-realtime-speech.ts';
+import { connectNodeRealtime } from './src/infra/node-realtime-connect.ts';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_']);
   const logger = createLogger({ level: env.LOG_LEVEL });
+  const talkLog = createTalkLogger(logger);
   const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
     : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
   const modelConfig = { model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL };
   const model = createOpenAICompletion(modelConfig);
   const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
+  const speech = { apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
+    model: env.OPENAI_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1-mini', voice: env.OPENAI_TTS_VOICE?.trim() || 'coral' };
+  const speaker = createCachedSpeaker(createRealtimeSpeaker({ ...speech, connect: connectNodeRealtime, warn: entry => logger.warn(entry) }),
+    createMemoryAudioCache(), { model: speech.model, voice: speech.voice, promptVersion: REALTIME_SPEECH_PROMPT_VERSION, warn: entry => logger.warn(entry) });
   const listener = getRequestListener(createApi({
-    talk: { tutor: createTutor(model, { log: createTalkLogger(logger) }), transcriber: createOpenAITranscriber({
+    talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
-    }), log: createTalkLogger(logger) },
+    }), log: talkLog },
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),

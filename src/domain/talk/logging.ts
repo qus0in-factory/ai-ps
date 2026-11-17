@@ -1,5 +1,5 @@
 export interface TalkLogEntry {
-  event: 'turn' | 'report' | 'transcribe';
+  event: 'turn' | 'report' | 'transcribe' | 'speech';
   ok: boolean;
   ms: number;
   turns?: number;
@@ -8,6 +8,9 @@ export interface TalkLogEntry {
   reportChars?: number;
   inputBytes?: number;
   outputChars?: number;
+  cache?: 'hit' | 'miss';
+  inputChars?: number;
+  outputBytes?: number;
 }
 
 export type TalkLogListener = (entry: TalkLogEntry) => void;

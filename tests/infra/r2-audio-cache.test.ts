@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import { createR2AudioCache, type R2Bucket } from '../../src/infra/r2-audio-cache.ts';
 
 describe('Given an R2 audio cache binding', () => {
+  it('When the binding is missing Then always misses, allows writes and warns once across instances', async () => {
+    const warnings: unknown[] = [];
+    const options = { warn: (entry: unknown) => warnings.push(entry) };
+    for (let i = 0; i < 2; i++) {
+      const cache = createR2AudioCache(undefined, options);
+      assert.deepEqual(await cache.get('tts/v1/test.wav'), { ok: true, value: null });
+      assert.equal((await cache.put('tts/v1/test.wav', { bytes: new Uint8Array([1]), mimeType: 'audio/wav' }, { model: 'test', voice: 'coral' })).ok, true);
+    }
+    assert.deepEqual(warnings, [{ event: 'tts_cache_unbound' }]);
+  });
   it('When reading Then distinguishes missing objects and loads WAV bytes', async () => {
     const cache = createR2AudioCache({ get: async key => key === 'missing' ? null : { arrayBuffer: async () => new Uint8Array([1, 2]).buffer }, put: async () => null });
     assert.deepEqual(await cache.get('missing'), { ok: true, value: null });

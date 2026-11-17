@@ -10,6 +10,8 @@ import { ChatPage } from './pages/ChatPage.tsx';
 import { AdventurePage } from './pages/AdventurePage.tsx';
 import { IndexPage } from './pages/IndexPage.tsx';
 import { TalkPage } from './pages/TalkPage.tsx';
+import type { AudioPlayer } from '../domain/talk/listening.ts';
+import type { Recorder } from '../domain/talk/recording.ts';
 import type { TalkClient } from '../domain/talk/types.ts';
 import type { TalkStore } from './state/talk-store.ts';
 
@@ -28,6 +30,8 @@ export function App(props: {
   queens: QueensGenerationController;
   adventure: AdventureClient;
   adventureStore: AdventureStore;
+  recorder: Recorder;
+  audioPlayer: AudioPlayer;
   talk: TalkClient;
   talkStore: TalkStore;
 }) {
@@ -38,7 +42,7 @@ export function App(props: {
         <Route path="/queens" component={() => <QueensPage queens={props.queens} />} />
         <Route path="/queen" component={RedirectToQueens} />
         <Route path="/chat" component={() => <ChatPage chat={props.chat} />} />
-        <Route path="/talk" component={() => <TalkPage client={props.talk} store={props.talkStore} />} />
+        <Route path="/talk" component={() => <TalkPage audioPlayer={props.audioPlayer} recorder={props.recorder} client={props.talk} store={props.talkStore} />} />
         <Route path="/adventure" component={() => (
           <AdventurePage client={props.adventure} store={props.adventureStore} />
         )} />

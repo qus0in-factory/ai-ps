@@ -7,10 +7,19 @@ function capture() {
   const sink = Object.fromEntries(['info', 'warn', 'error'].map(method => [method,
     (value: unknown) => { entries.push({ method, value }); },
   ])) as Pick<Console, 'info' | 'warn' | 'error'>;
-  return { entries, logger: { info: sink.info, warn: sink.warn, error: sink.error } };
+  return { entries, logger: { info: sink.info, warn: sink.warn } };
 }
 
 describe('Given a Talk logger', () => {
+  it('When logging speech Then includes only cache, lengths, bytes and timing', () => {
+    const { entries, logger } = capture();
+    createTalkLogger(logger)({ event: 'speech', ok: true, ms: 5, cache: 'hit', inputChars: 6, outputBytes: 48,
+      text: 'private text', audio: 'private audio', reason: 'sk-private' } as never);
+    assert.doesNotMatch(JSON.stringify(entries), /private/);
+    assert.deepEqual(entries[0], { method: 'info', value: {
+      component: 'talk', event: 'speech', ok: true, ms: 5, cache: 'hit', inputChars: 6, outputBytes: 48,
+    } });
+  });
   it('When a turn entry contains raw text Then logs only metadata', () => {
     const { entries, logger } = capture();
     createTalkLogger(logger)({ event: 'turn', ok: true, ms: 1, text: '秘密', reply: '秘密' } as never);

@@ -1,4 +1,4 @@
-import type { TalkClient, TalkPhase, TalkSession, TutorReply, TutorGender, TutorMood } from '../../domain/talk/types.ts';
+import type { Tutor, Reporter, TalkPhase, TalkSession, TutorReply, TutorGender, TutorMood } from '../../domain/talk/types.ts';
 import type { Result } from '../../domain/chat.ts';
 import { createSession, normalizeSession, canAddTurn, LIMITS, isTutorGender, record, text } from '../../domain/talk/session.ts';
 
@@ -8,10 +8,11 @@ export interface TalkView {
   session: TalkSession | null;
   phase: TalkPhase;
   learnerText: string;
+  recordingSeconds: number;
   report?: string;
   error: string;
 }
-export function initialState(): TalkView { return { selectedTutor: 'f', session: null, phase: 'idle', learnerText: '', report: undefined, error: '' }; }
+export function initialState(): TalkView { return { selectedTutor: 'f', session: null, phase: 'idle', learnerText: '', recordingSeconds: 0, report: undefined, error: '' }; }
 export function restoreSession(value: unknown): TalkSession | null {
   const session = normalizeSession(value);
   return session?.turns.length ? session : null;
@@ -33,9 +34,9 @@ export function restoreTalkView(value: unknown): TalkView {
   return { ...view, phase: 'ended', report,
     error: report ? '' : '저장된 보고서를 읽지 못했습니다. 새 연습을 시작해 주세요.' };
 }
-export const isBusy = (view: TalkView) => view.phase === 'thinking' || view.phase === 'reporting';
+export const isBusy = (view: TalkView) => ['thinking', 'reporting', 'requesting-microphone', 'recording', 'transcribing'].includes(view.phase);
 export function activeTutorMood(view: TalkView): TutorMood {
-  return isBusy(view) ? 'think' : view.session?.turns.at(-1)?.tutor.mood ?? 'neutral';
+  return ['thinking', 'reporting', 'transcribing'].includes(view.phase) ? 'think' : view.session?.turns.at(-1)?.tutor.mood ?? 'neutral';
 }
 export const canSend = (view: TalkView) => !isBusy(view) && view.phase !== 'ended' && !!view.session && canAddTurn(view.session, view.learnerText);
 export const atLimit = (view: TalkView) => !!view.session && !canAddTurn(view.session, 'x');
@@ -48,7 +49,7 @@ export function addTurn(view: TalkView, learner: string, tutor: TutorReply): Tal
 
 interface ViewStore { getState(): TalkView; setState(view: TalkView): void }
 /** Mutations call these use cases; only completed responses change the persisted session. */
-export function createTalkController(client: TalkClient, store: ViewStore) {
+export function createTalkController(client: Tutor & Reporter, store: ViewStore) {
   let controller: AbortController | undefined;
   async function run(kind: 'start' | 'send' | 'report', learner?: string): Promise<Result<void>> {
     const view = store.getState();

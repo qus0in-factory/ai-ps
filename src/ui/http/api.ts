@@ -9,12 +9,14 @@ import type { Tutor, Reporter } from '../../domain/talk/types.ts';
 import { parseTurnRequest, parseReportRequest, type TalkLogListener } from '../../app/talk/tutor.ts';
 import type { Transcriber } from '../../domain/talk/transcription.ts';
 import { validateTranscriptionAudio } from '../../app/talk/transcribe.ts';
+import { parseSpeechRequest } from '../../app/talk/speech.ts';
+import type { CachedSpeaker } from '../../domain/talk/speech-cache.ts';
 
 export interface ApiDependencies {
   reply: Reply;
   queens: QueensGenerator;
   adventure: GameMaster;
-  talk: { tutor: Tutor & Reporter; transcriber?: Transcriber; log?: TalkLogListener };
+  talk: { tutor: Tutor & Reporter; transcriber?: Transcriber; speaker?: CachedSpeaker; log?: TalkLogListener };
 }
 
 type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; status: number; detail: string };
@@ -166,12 +168,32 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
   });
   postOnly('/api/talk/transcribe');
 
+  api.post('/api/talk/speech', limit(4_000, '음성 입력이 너무 큽니다.'), async c => {
+    const body = await readJson(c.req.raw);
+    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', c.req.path);
+    const input = parseSpeechRequest(body.value);
+    if (!input.ok) return problem(400, input.reason, c.req.path);
+    const started = Date.now();
+    let result: Awaited<ReturnType<CachedSpeaker['speak']>>;
+    try {
+      result = talk.speaker ? await talk.speaker.speak(input.value, c.req.raw.signal)
+        : { ok: false, reason: '음성 서비스를 사용할 수 없습니다.' };
+    } catch { result = { ok: false, reason: '음성을 만들지 못했습니다.' }; }
+    try {
+      talk.log?.({ event: 'speech', ok: result.ok, ms: Date.now() - started, inputChars: [...input.value].length,
+        ...(result.ok ? { cache: result.value.cache, outputBytes: result.value.bytes.byteLength } : {}) });
+    } catch { /* Logging must not discard generated speech. */ }
+    return result.ok ? new Response(Uint8Array.from(result.value.bytes).buffer, {
+      headers: { 'Content-Type': 'audio/wav', 'X-Talk-Cache': result.value.cache, 'Cache-Control': 'private, max-age=86400' },
+    }) : problem(502, '음성을 만들지 못했습니다. 잠시 후 다시 시도해주세요.', c.req.path);
+  });
+  postOnly('/api/talk/speech');
+
   api.post('/api/talk/turn', limit(64_000, '대화 기록이 너무 큽니다.'), async c => {
     const body = await readJson(c.req.raw);
     if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', c.req.path);
     const input = parseTurnRequest(body.value);
     if (!input.ok) return problem(400, input.reason, c.req.path);
-    if (!talk) return problem(502, '회화 서비스를 사용할 수 없습니다.', c.req.path);
     const result = await talk.tutor.respond(input.value.session, input.value.text, c.req.raw.signal);
     return result.ok ? c.json(result.value, 200, { 'Cache-Control': 'no-store' }) : problem(502, result.reason, c.req.path);
   });
@@ -181,7 +203,6 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
     if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', c.req.path);
     const input = parseReportRequest(body.value);
     if (!input.ok) return problem(400, input.reason, c.req.path);
-    if (!talk) return problem(502, '회화 서비스를 사용할 수 없습니다.', c.req.path);
     const result = await talk.tutor.report(input.value, c.req.raw.signal);
     return result.ok ? c.json({ report: result.value }, 200, { 'Cache-Control': 'no-store' }) : problem(502, result.reason, c.req.path);
   });

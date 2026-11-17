@@ -67,3 +67,14 @@
   .talk-current-tutor { gap: 10px; }
   .talk-current-tutor .talk-portrait { width: 96px; height: 96px; }
 }
+
+.talk-record-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.talk-record-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.talk-record-button[aria-pressed="true"] { background: #fff0ee; color: #8d2525; border-color: #8d2525; }
+.talk-record-time { color: #8d2525; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.talk-record-hint { color: #525b56; font-size: .8rem; line-height: 1.5; margin: 8px 0 16px; }
+
+.talk-listen { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.talk-listen-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: .82rem; padding: 8px 12px; }
+.talk-listen-status, .talk-listen small { font-size: .78rem; color: #525b56; }
+.talk-listen .talk-listen-error { flex-basis: 100%; margin: 0; color: #8d2525; font-size: .82rem; }

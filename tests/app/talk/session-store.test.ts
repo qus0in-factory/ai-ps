@@ -19,7 +19,7 @@ describe('Given a text conversation view', () => {
     let view: TalkView = addTurn(initialState(), '', reply);
     let resolve!: (v: { ok: true; value: TutorReply }) => void;
     let calls = 0;
-    const client: TalkClient = { respond: async () => { calls++; return await new Promise(r => { resolve = r; }); }, report: async () => ({ ok: true, value: '보고서' }) };
+    const client: TalkClient = { speak: async () => ({ ok: false, reason: 'unused' }), transcribe: async () => ({ ok: false, reason: 'unused' }), respond: async () => { calls++; return await new Promise(r => { resolve = r; }); }, report: async () => ({ ok: true, value: '보고서' }) };
     const controller = createTalkController(client, { getState: () => view, setState: next => { view = next; } });
     const pending = controller.send('家に帰りました。');
     assert.equal(view.phase, 'thinking');

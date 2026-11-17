@@ -1,6 +1,6 @@
 # ai-ps
 
-문제 해결형 AI 에이전트 실습 — Plan-Execute·ReAct·Function calling 채팅 에이전트와 LLM 기반 Queens 퍼즐 생성기.
+문제 해결형 AI 에이전트 실습 — Plan-Execute·ReAct·Function calling 채팅 에이전트, LLM 기반 Queens 퍼즐 생성기, 일본어 회화 연습.
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![SolidJS](https://img.shields.io/badge/SolidJS-2C4F7C?logo=solid&logoColor=white)
@@ -18,7 +18,7 @@
 ```mermaid
 flowchart LR
   subgraph Browser
-    UI["ui · SolidJS<br/>/chat · /queens"]
+    UI["ui · SolidJS<br/>/chat · /queens · /talk"]
   end
   subgraph Server["Vite dev server + Hono /api"]
     API["ui/http · Hono API"]
