@@ -107,17 +107,23 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source")
     parser.add_argument("output")
-    parser.add_argument("size", type=int, choices=(64, 32, 96))
+    parser.add_argument("size", type=int, choices=(16, 32, 48, 64, 96, 180, 192, 512))
     parser.add_argument("--palette", default=None, help="palette.png 경로(주면 갱신한다)")
     parser.add_argument("--tolerance", type=int, default=48)
     parser.add_argument("--flood-fill", action="store_true", help="모서리 4곳에서 연결된 배경 제거")
     parser.add_argument("--flood-tolerance", type=int, default=30)
     parser.add_argument("--palette-swap", default=None, help="from=to hex 쌍을 쉼표로 구분(알파 보존)")
+    parser.add_argument("--opaque", action="store_true", help="배경을 투명하게 키잉하지 않고 불투명하게 유지(파비콘용)")
     args = parser.parse_args(argv)
 
     source = Image.open(args.source).convert("RGBA")
     palette = palette_image(args.palette)
-    if args.palette_swap:
+    if args.opaque:
+        mapped = source.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
+        mapped.putalpha(Image.new("L", source.size, 255))
+        result = mapped.resize((args.size, args.size), Image.Resampling.NEAREST)
+        mode = "opaque palette=16 colors dither=none"
+    elif args.palette_swap:
         alpha = source.getchannel("A")
         mapped = apply_swaps(source.convert("RGB"), parse_swaps(args.palette_swap)).convert("RGBA")
         mapped.putalpha(alpha)

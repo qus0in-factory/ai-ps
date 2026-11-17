@@ -21,16 +21,18 @@
 - pnpm 10+는 의존성 빌드 스크립트를 차단한다. `ERR_PNPM_IGNORED_BUILDS`가 나면 `pnpm-workspace.yaml`의 `allowBuilds`에 패키지를 추가한다(현재 esbuild, workerd).
 
 ## 릴리스
-- `pnpm release <버전>`(`scripts/release.mjs`). 작업 트리 확인 → test·typecheck·build → 태그 중복 확인 → HEAD에 태그 → `git push origin main <버전>` → `git ls-remote --tags`로 확인. 커밋은 스크립트가 하지 않고, 미추적 `docs/retro`는 경고만 낸다.
+- 기본은 빠른 경로다. `pnpm test`는 `tests/**/*.test.ts`만 실행한다. 느리거나 복잡한 검증은 `*.slow.ts`로 분리하며, `pnpm test:slow`·`pnpm smoke <url> --llm`·`bash tests/scripts/herdr/run.sh`·실모델 검증은 요청 시에만 실행한다. 기본 CI·릴리스·배포에 이 특수 검증을 추가하지 않는다.
+- `pnpm release <버전>`(`scripts/release.mjs`). 작업 트리 확인 → 빠른 test·typecheck·build → 태그 중복 확인 → HEAD에 태그 → `git push --atomic origin <branch> <버전>` → `git ls-remote --tags`로 확인. 커밋은 스크립트가 하지 않고, 미추적 `docs/retro/`만 경고로 허용한다.
 - 계획 확인은 `node scripts/release.mjs <버전> --dry-run`으로 한다(태그·푸시 없음).
+- 릴리스 직후 소스를 바꾸지 않고 배포할 때는 `pnpm run deploy --skip-build`로 방금 만든 `dist`를 재사용한다. `dist/index.html`이 없으면 실패한다. 독립 배포는 기본 build를 한 번 수행한다.
 - 중간에 끼어든 작은 요청은 별도 버전으로 먼저 커밋·태그해 순서를 유지한다.
 
 ## Cloudflare Workers 배포
 - 배포는 총괄(`ps-opus`)만 한다. 워커는 배포하지 않는다.
-- 순서: `pnpm test`·`pnpm typecheck`·`pnpm build` → 리뷰 게이트 → `pnpm run deploy` → workers.dev URL 확인 → `pnpm release <버전>`(태그 푸시) → Discord 보고.
-- `pnpm run deploy`(`scripts/deploy.mjs`)가 build → 앱 키 secret 동기화 → `wrangler deploy` → URL·Version 파싱 → `pnpm smoke <url>`까지 이어 한다. 수동 `wrangler secret bulk`는 쓰지 않는다. `--skip-secrets`, `--dry-run` 지원. 첫 배포(Worker 미존재)로 `wrangler secret list`가 실패하면 원격 키 비교만 건너뛴다.
-- secret은 `.env`의 앱 키만 올린다: `OPENAI_API_KEY`·`OPENAI_MODEL`·`OPENAI_TOOL_MODE`·`OWM_API_KEY`, 있으면 `OPENAI_BASE_URL`·`LOG_LEVEL`. `DISCORD_WEBHOOK_URL`은 올리지 않고, 값은 출력하지 않는다. 임시 JSON은 0600으로 만들고 끝에 삭제한다.
-- 스모크(`pnpm smoke <url>`, URL 생략 시 운영 URL): `/`·`/queen`·`/chat` 200과 `POST /api/chat`의 `content` 포함 JSON을 확인한다. POST는 실제 LLM 호출이라 비용·로그가 발생한다(읽기 전용 점검 아님). 응답 본문은 길이·존재 여부만 출력한다.
+- 릴리스와 이어 하는 빠른 경로: 리뷰 게이트 → `pnpm release <버전>`(test·typecheck·build·태그 푸시) → `pnpm run deploy --skip-build` → workers.dev URL과 GET 스모크 확인 → Discord 보고. 별도 사전 build를 반복하지 않는다. 이미 검증·빌드를 마친 뒤 배포하는 다른 절차에서도 `--skip-build`를 사용하되, 빌드 이후 소스를 바꾸었다면 다시 빌드한다.
+- `pnpm run deploy`(`scripts/deploy.mjs`)가 build 1회 → 앱 키 secret 동기화 → `wrangler deploy` → URL·Version 파싱 → GET 스모크까지 이어 한다. 수동 `wrangler secret bulk`는 쓰지 않는다. `--skip-build`·`--skip-secrets`·`--dry-run` 지원. 첫 배포(Worker 미존재)로 `wrangler secret list`가 실패하면 원격 키 비교만 건너뛴다.
+- secret은 `.env`의 앱 키만 올린다: `OPENAI_API_KEY`·`OPENAI_MODEL`·`OPENAI_TOOL_MODE`·`OWM_API_KEY`, 있으면 `OPENAI_BASE_URL`·`LOG_LEVEL`. `DISCORD_WEBHOOK_URL`은 올리지 않고, 값은 출력하지 않는다. JSON은 stdin으로 전달하며 임시 secret 파일은 만들지 않는다.
+- 기본 스모크(`pnpm smoke <url>`, URL 생략 시 운영 URL)는 `/`·`/queen`·`/chat`의 GET 200만 확인한다. 요청받았을 때만 `pnpm smoke <url> --llm`으로 `POST /api/chat`의 `content` 포함 JSON을 추가 확인한다. 이 POST는 실제 LLM 호출이라 비용·로그가 발생한다. 응답 본문은 길이·존재 여부만 출력한다.
 - 공개 URL에는 현재 인증·rate limit이 없다(2026-11-17). 변경 시 이 줄을 갱신한다.
 
 ### 배포 전 리뷰 게이트

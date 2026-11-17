@@ -1,13 +1,75 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { release } from '../../scripts/release.mjs';
 import { deploy } from '../../scripts/deploy.mjs';
 
+const { smoke } = await import(new URL('../../scripts/smoke.mjs', import.meta.url).href) as {
+  smoke(args: string[], options: { fetcher?: typeof fetch; table?: (rows: unknown[]) => void }): Promise<boolean>;
+};
+
 const versionId = '12345678-abcd-1234-abcd-123456789abc';
 const deployment = `https://ai-ps.test.workers.dev\nCurrent Version ID: ${versionId}`;
+
+describe('Given the default fast deployment checks', () => {
+  for (const llm of [false, true]) {
+    it(`When smoke ${llm ? 'explicitly enables LLM' : 'uses defaults'} Then ${llm ? 'includes' : 'omits'} the chat POST`, async () => {
+      const calls: { path: string; method: string }[] = [];
+      let rows: unknown[] = [];
+      assert.equal(await smoke(['https://fake.example', ...(llm ? ['--llm'] : [])], {
+        fetcher: async (url, init) => {
+          const path = new URL(String(url)).pathname;
+          calls.push({ path, method: init!.method! });
+          if (path === '/api/chat') {
+            assert.deepEqual(JSON.parse(String(init!.body)), { messages: [{ role: 'user', content: '안녕' }] });
+            return Response.json({ content: 'fake answer' });
+          }
+          return new Response('<html>fake page</html>');
+        }, table: values => { rows = values; },
+      }), true);
+      assert.deepEqual(calls, [
+        { path: '/', method: 'GET' }, { path: '/queen', method: 'GET' }, { path: '/chat', method: 'GET' },
+        ...(llm ? [{ path: '/api/chat', method: 'POST' }] : []),
+      ]);
+      assert.equal(rows.length, llm ? 4 : 3);
+    });
+  }
+  it('When an explicitly requested LLM check fails Then smoke fails without printing response text', async () => {
+    let rows: unknown[] = [];
+    assert.equal(await smoke(['https://fake.example', '--llm'], {
+      fetcher: async url => new URL(String(url)).pathname === '/api/chat'
+        ? new Response('PRIVATE_FAILURE', { status: 502 }) : new Response('<html>page</html>'),
+      table: values => { rows = values; },
+    }), false);
+    assert.ok(!JSON.stringify(rows).includes('PRIVATE_FAILURE'));
+  });
+  it('When reusing a release build Then deploy skips build and its smoke does not enable LLM', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ps-reuse-build-'));
+    const calls: { step: string; args: string[] }[] = [];
+    try {
+      mkdirSync(join(cwd, 'dist'));
+      writeFileSync(join(cwd, 'dist/index.html'), '<html>built page</html>');
+      await deploy(['--skip-secrets', '--skip-build'], { cwd, print: () => {}, execute: (step, _program, args) => {
+        calls.push({ step, args });
+        return step === 'deploy' ? deployment : '';
+      } });
+      assert.deepEqual(calls.map(call => call.step), ['deploy', 'smoke']);
+      assert.ok(!calls.find(call => call.step === 'smoke')!.args.includes('--llm'));
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+  it('When build is skipped without existing assets Then fails before any remote commands', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ps-missing-build-'));
+    const calls: string[] = [];
+    try {
+      await assert.rejects(deploy(['--skip-secrets', '--skip-build'], { cwd, print: () => {}, execute: step => {
+        calls.push(step); return '';
+      } }), /build:.*dist\/index\.html/);
+      assert.deepEqual(calls, []);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+});
 
 describe('Given release orchestration with a fake executor', () => {
   it('When dry-running Then performs only local read commands and prints the complete plan', async () => {

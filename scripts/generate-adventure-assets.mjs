@@ -83,7 +83,7 @@ async function main() {
   const rawPath = path.resolve(root, options.rawOut, `${label}.png`);
   const finalPath = path.resolve(root, options.finalOut, `${asset.name}.png`);
   const palettePath = path.resolve(root, options.finalOut, 'palette.png');
-  const prompt = `${manifest.promptPrefix} ${asset.subject}`;
+  const prompt = asset.prompt ?? `${manifest.promptPrefix} ${asset.subject}`;
   const baseUrl = (process.env[manifest.api.baseUrlEnv] || manifest.api.defaultBaseUrl).replace(/\/+$/, '');
   const apiKey = process.env[manifest.api.keyEnv];
 
@@ -117,7 +117,7 @@ async function main() {
 
   const started = Date.now();
   const output = execFileSync('python3', ['-I', path.join(here, 'adventure-postprocess.py'),
-    rawPath, finalPath, String(asset.final), '--palette', palettePath], { encoding: 'utf8' });
+    rawPath, finalPath, String(asset.final), '--palette', palettePath, ...(asset.opaque ? ['--opaque'] : [])], { encoding: 'utf8' });
   console.log(output.trim());
   console.log(`FINAL ${finalPath} (${(await readFile(finalPath)).length} bytes)`);
   console.log(`ELAPSED_MS ${Date.now() - started}`);

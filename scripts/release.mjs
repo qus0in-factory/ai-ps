@@ -4,7 +4,7 @@ import { ROOT, STORE, command, noLocalStore, fail, cli, parseOptions } from './l
 
 export async function release(args, { cwd = ROOT, execute = command, print = console.log } = {}) {
   if (args.includes('--help')) {
-    print('release.mjs <version> [--dry-run] [--timeout-ms N]\nClean tracked worktree required; only untracked docs/retro/ is allowed. No commit is created. Atomic push; a failed push removes the new local tag.\nCommands default to a 10 minute deadline. PNPM_STORE_DIR overrides the default pnpm store.\nDeployment requires .env or deploy --skip-secrets; smoke POST makes a real LLM call (cost/logs).');
+    print('release.mjs <version> [--dry-run] [--timeout-ms N]\nClean tracked worktree required; only untracked docs/retro/ is allowed. No commit is created. Atomic push; a failed push removes the new local tag.\nRuns fast test, typecheck and build. Deploy immediately afterward with --skip-build to reuse dist; do not change source between commands. Slow/special checks run only on request: test:slow, smoke --llm, Herdr probes, real-model checks.\nCommands default to a 10 minute deadline. PNPM_STORE_DIR overrides the default pnpm store.\nDeployment requires .env or deploy --skip-secrets. Smoke defaults to GET only; smoke --llm POST makes a real LLM call (cost/logs).');
     return;
   }
   const { values, timeoutMs } = parseOptions(args, ['--dry-run']);

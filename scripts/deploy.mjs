@@ -6,14 +6,16 @@ import { ROOT, STORE, command, noLocalStore, fail, cli, parseOptions } from './l
 
 export async function deploy(args, { cwd = ROOT, execute = command, print = console.log } = {}) {
   if (args.includes('--help')) {
-    print('deploy.mjs [--skip-secrets] [--dry-run] [--timeout-ms N]\nDefault: requires .env; uploads nonempty allowlisted app keys via stdin. --skip-secrets deploys using existing remote secrets without .env. Missing local keys are preserved remotely with a warning, never deleted.\nRequires noninteractive Wrangler authentication. Only the listed options are accepted; workers.dev must be enabled. No automatic rollback: a failure may follow successful secret upload or deployment.\nCommands default to a 10 minute hard deadline. PNPM_STORE_DIR overrides the default pnpm store.\nPost-deploy smoke POST makes a real LLM call and may incur cost/logs. --dry-run performs no remote calls.');
+    print('deploy.mjs [--skip-secrets] [--skip-build] [--dry-run] [--timeout-ms N]\nDefault: requires .env; uploads nonempty allowlisted app keys via stdin. --skip-secrets deploys using existing remote secrets without .env. Missing local keys are preserved remotely with a warning, never deleted.\n--skip-build reuses existing dist/index.html after release/build; do not change source between building and deploying. Standalone deployment builds once by default.\nRequires noninteractive Wrangler authentication. Only the listed options are accepted; workers.dev must be enabled. No automatic rollback: a failure may follow successful secret upload or deployment.\nCommands default to a 10 minute hard deadline. PNPM_STORE_DIR overrides the default pnpm store.\nPost-deploy smoke checks GET pages only. Run smoke --llm only on request: its POST makes a real LLM call (cost/logs). --dry-run performs no remote calls.');
     return;
   }
-  const { values, timeoutMs } = parseOptions(args, ['--skip-secrets', '--dry-run']);
-  if (values.some(arg => !['--skip-secrets', '--dry-run'].includes(arg))) fail('usage', 'deploy.mjs [--skip-secrets] [--dry-run] [--timeout-ms N]');
+  const { values, timeoutMs } = parseOptions(args, ['--skip-secrets', '--skip-build', '--dry-run']);
+  if (values.some(arg => !['--skip-secrets', '--skip-build', '--dry-run'].includes(arg))) fail('usage', 'deploy.mjs [--skip-secrets] [--skip-build] [--dry-run] [--timeout-ms N]');
   const dry = values.includes('--dry-run');
   const skipSecrets = values.includes('--skip-secrets');
+  const skipBuild = values.includes('--skip-build');
   noLocalStore(cwd);
+  if (skipBuild && !existsSync(join(cwd, 'dist/index.html'))) fail('build', 'dist/index.html missing; run release or build before --skip-build');
   let secrets = {};
   if (!skipSecrets) {
     try {
@@ -22,20 +24,22 @@ export async function deploy(args, { cwd = ROOT, execute = command, print = cons
     print(`SECRET KEYS: ${Object.keys(secrets).join(', ') || '(none)'}`);
   }
   if (dry) {
-    print(`PLAN pnpm ${STORE} build`);
+    print(skipBuild ? 'PLAN reuse existing dist (--skip-build)' : `PLAN pnpm ${STORE} build`);
     if (!skipSecrets) {
       print(`PLAN pnpm ${STORE} exec wrangler secret list --format json; warn about omitted app keys preserved remotely`);
       print(`PLAN pnpm ${STORE} exec wrangler secret bulk (JSON via stdin; no temporary file)`);
     }
     print(`PLAN pnpm ${STORE} exec wrangler deploy`);
-    print('PLAN parse workers.dev URL and Version ID; smoke POST makes a real LLM call only outside dry-run');
+    print('PLAN parse workers.dev URL and Version ID; smoke GET pages only (LLM requires a separate smoke --llm)');
     return;
   }
   const run = (step, program, argv, options = {}) => execute(step, program, argv, { cwd, timeoutMs, forwardOutput: step === 'smoke', ...options });
   let phase = 'build', secretState = skipSecrets ? 'skipped' : 'unchanged', deploymentState = 'not-started';
   try {
-    await run('build', 'pnpm', [STORE, 'build']);
-    print('PASS build');
+    if (!skipBuild) {
+      await run('build', 'pnpm', [STORE, 'build']);
+      print('PASS build');
+    } else print('SKIP build (reusing existing dist)');
     noLocalStore(cwd);
     if (!skipSecrets) {
       phase = 'secret-list';

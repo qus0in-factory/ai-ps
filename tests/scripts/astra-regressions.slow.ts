@@ -35,7 +35,7 @@ describe('Given Astra subprocess reproductions', () => {
   it('When smoke receives fake secret and terminal controls Then prints metadata only', () => {
     const code = `import{smoke}from ${JSON.stringify(join(root, 'scripts/smoke.mjs'))};
       let rows;
-      const ok=await smoke(['https://fake.example'],{fetcher:async()=>new Response('FAKE_ERROR_SECRET\\x1b[31m',{status:502}),table:x=>rows=x});
+      const ok=await smoke(['https://fake.example','--llm'],{fetcher:async()=>new Response('FAKE_ERROR_SECRET\\x1b[31m',{status:502}),table:x=>rows=x});
       console.log(JSON.stringify({ok,rows}));`;
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 3000 });
     assert.equal(result.status, 0, result.stderr);
