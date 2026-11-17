@@ -32,12 +32,13 @@ function systemPrompt(size: number): string {
 }
 
 // A missing region is a semantic defect, not a malformed matrix; it can still seed growth.
+// size <= 9: region IDs are 0..8, and the final check is Number(char) < size.
 function parseProposal(content: string, size: number): RegionId[][] | undefined {
   try {
     const data = JSON.parse(content);
     const raw = data.rows ?? data.regions;
     const regions = Array.isArray(raw) && raw.every(row => typeof row === 'string')
-      ? raw.map(row => row.replace(/\s/g, '').split('').map(char => /^[0-8]$/.test(char) && Number(char) < size ? Number(char) : NaN)) // size <= 9 가정: region ID는 0..8 범위, 최종 검증은 Number(char) < size
+      ? raw.map(row => row.replace(/\s/g, '').split('').map(char => /^[0-8]$/.test(char) && Number(char) < size ? Number(char) : NaN))
       : raw;
     const grid = validateGrid({ size, regions });
     if (grid.valid || !grid.issues.some(issue => issue.code === 'INVALID_GRID')) return regions as RegionId[][];

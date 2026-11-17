@@ -104,7 +104,6 @@ function takeableCells(grid: Grid, target: RegionId, queens: Set<number>): Cell[
     });
 }
 
-
 /**
  * 끊어진 영역 조각을 퀸이 있는 연결 성분만 남기고 이웃 영역으로 넘긴다.
  * 넘길 때는 현재 칸 수가 가장 적은 이웃 영역을 고른다(동률은 먼저 만난 순서).

@@ -57,7 +57,6 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     assert.ok(events.every(isGenerationEvent));
     assert.doesNotMatch(JSON.stringify(events), /"row"|"column"|"solution"|"regions"/);
     if (result.ok) {
-    
       assert.deepEqual(result.value.solution, solution);
       assert.equal(validateDesign(result.value.puzzle, solution).valid, true);
     }

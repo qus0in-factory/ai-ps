@@ -37,7 +37,8 @@ describe('Given bounded algorithm fallback restarts', () => {
       const generator = createQueensGenerator({ complete: async (_messages, options) => {
         calls++;
         solution = JSON.parse(_messages[1]!.content).queens;
-        modelElapsed += options!.timeoutMs!;
+        modelElapsed += 20_000;
+        assert.ok(options?.signal instanceof AbortSignal);
         return { ok: false, reason: '모델 응답 시간이 초과되었습니다.' };
       } }, {
         random: () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32),

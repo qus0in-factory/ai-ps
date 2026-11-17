@@ -33,7 +33,7 @@ export function QueensGeneratorWidget(props: { controller: QueensGenerationContr
     <main class="queens-page">
       <header><A href="/">← 홈</A><h1>Queens</h1></header>
       <p>모델이 영역 모양을 제안하고 코드가 유일한 정답으로 다듬습니다.</p>
-      <p class="queens-note">모델 응답이 없거나 어긋나도 코드가 퍼즐을 완성합니다.</p>
+      <p class="queens-note">모델 응답이 없거나 어긋나도 코드가 퍼즐을 완성합니다. 드물게 실패할 수 있습니다.</p>
       <form onSubmit={(event) => { event.preventDefault(); void props.controller.generate(); }}>
         <label>격자 크기 <Select label="격자 크기" value={state().size} options={sizes} disabled={state().pending}
           onChange={(value) => props.controller.setSize(Number(value))} /></label>
