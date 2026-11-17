@@ -4,7 +4,7 @@ import { createApi } from '../../src/ui/http/api.ts';
 import type { QueensGenerator } from '../../src/domain/queens/generation.ts';
 
 async function request(body: string, generator: QueensGenerator, method = 'POST') {
-  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: async () => { throw new Error('Unexpected chat request'); }, queens: generator });
+  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: async () => { throw new Error('Unexpected chat request'); }, queens: generator, talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } } });
   const response = await api.request('/api/queens/generate', {
     method, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body }),
   });

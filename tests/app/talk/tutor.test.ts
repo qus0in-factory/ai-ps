@@ -8,7 +8,7 @@ describe('Given the text tutor application', () => {
     const calls: unknown[] = [];
     const tutor = createTutor({ complete: async (messages, options) => {
       calls.push(options); assert.equal(Object.hasOwn(options!, 'temperature'), false);
-      assert.equal(options?.reasoning_effort, 'none'); assert.equal(options?.timeoutMs, 60_000);
+      assert.equal(options?.reasoning_effort, 'none');
       assert.equal(options?.max_completion_tokens, 800); assert.ok(options?.signal);
       return { ok: true, value: { role: 'assistant', content: options?.response_format ? '{"reply":"今日はどうでしたか？","correction":null,"betterExpression":null}' : '잘한 표현\n다음에는 과거형을 연습하세요.' } };
     } });
@@ -47,6 +47,22 @@ describe('Given the text tutor application', () => {
       const pending = tutor.respond(createSession(), undefined, caller.signal);
       (kind === 'cancel' ? caller : deadline).abort();
       assert.equal((await pending).ok, false); assert.equal(signal?.aborted, true); mock.mock.restore();
+    }
+  });
+
+  it('When responding and reporting Then logs only metadata and no message text', async () => {
+    const entries: unknown[] = [];
+    const tutor = createTutor({ complete: async (_messages, options) => ({
+      ok: true, value: { role: 'assistant', content: options?.response_format ? '{"reply":"秘密","correction":null,"betterExpression":null}' : '秘密の報告' },
+    }) }, { log: entry => entries.push(entry) });
+    const session = createSession();
+    await tutor.respond(session);
+    session.turns.push({ learner: '秘密の文', tutor: { mood: 'neutral' as const, reply: '秘密', correction: null, betterExpression: null } });
+    await tutor.report(session);
+    assert.equal(entries.length, 2);
+    for (const entry of entries) {
+      const text = JSON.stringify(entry);
+      assert.ok(!text.includes('秘密'));
     }
   });
 });

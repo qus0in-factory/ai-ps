@@ -1,6 +1,19 @@
 import type { CompletionGateway } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { TalkSession, Tutor, Reporter } from '../../domain/talk/types.ts';
+
+export interface TalkLogEntry {
+  event: 'turn' | 'report' | 'transcribe';
+  ok: boolean;
+  ms: number;
+  turns?: number;
+  learnerChars?: number;
+  replyChars?: number;
+  reportChars?: number;
+  inputBytes?: number;
+  outputChars?: number;
+}
+export type TalkLogListener = (entry: TalkLogEntry) => void;
 import { normalizeSession, record, only, text, canAddTurn, LIMITS } from '../../domain/talk/session.ts';
 import { TALK_FIXED_PHRASES } from '../../domain/talk/speech-cache.ts';
 import { parseTutorReply } from '../../domain/talk/reply.ts';
@@ -21,7 +34,8 @@ export function parseReportRequest(body: unknown): Result<TalkSession> {
   const session = record(body) && only(body, ['session']) ? normalizeSession(body.session) : undefined;
   return session?.turns.length ? { ok: true, value: session } : { ok: false, reason: '보고서를 만들 대화 기록이 필요합니다.' };
 }
-export function createTutor(model: CompletionGateway): Tutor & Reporter {
+export function createTutor(model: CompletionGateway, options: { log?: TalkLogListener } = {}): Tutor & Reporter {
+  const log = options.log;
   async function request(messages: Parameters<CompletionGateway['complete']>[0], json: boolean, external?: AbortSignal) {
     const timeout = AbortSignal.timeout(60_000);
     const signal = external ? AbortSignal.any([external, timeout]) : timeout;
@@ -33,7 +47,7 @@ export function createTutor(model: CompletionGateway): Tutor & Reporter {
         cancel = () => resolve(cancelled()); signal.addEventListener('abort', cancel, { once: true });
       });
       const result = await Promise.race([model.complete(messages, {
-        reasoning_effort: 'none', max_completion_tokens: 800, timeoutMs: 60_000, signal,
+        reasoning_effort: 'none', max_completion_tokens: 800, signal,
         ...(json ? { response_format: { type: 'json_object' as const } } : {}),
       }), aborted]);
       if (signal.aborted) return cancelled();
@@ -44,21 +58,45 @@ export function createTutor(model: CompletionGateway): Tutor & Reporter {
   }
   return {
     async respond(session, learner, signal) {
+      const started = Date.now();
       const input = parseTurnRequest({ session, ...(learner === undefined ? {} : { text: learner }) });
-      if (!input.ok) return input;
+      if (!input.ok) {
+        log?.({ event: 'turn', ok: false, ms: Date.now() - started, turns: 0, learnerChars: learner?.trim().length });
+        return input;
+      }
+      const turns = input.value.session.turns.length;
+      const learnerChars = input.value.text?.length ?? 0;
       const result = await request(buildTutorMessages(input.value.session, input.value.text), true, signal);
-      if (!result.ok) return result;
+      if (!result.ok) {
+        log?.({ event: 'turn', ok: false, ms: Date.now() - started, turns, learnerChars });
+        return result;
+      }
       const value = parseTutorReply(result.value.content ?? '');
+      const replyChars = (input.value.text === undefined ? TALK_FIXED_PHRASES.greeting : value.reply).length;
+      log?.({ event: 'turn', ok: true, ms: Date.now() - started, turns, learnerChars, replyChars });
       return { ok: true, value: input.value.text === undefined ? { ...value, reply: TALK_FIXED_PHRASES.greeting, correction: null, betterExpression: null } : value };
     },
     async report(session, signal) {
+      const started = Date.now();
       const input = parseReportRequest({ session });
-      if (!input.ok) return input;
+      if (!input.ok) {
+        log?.({ event: 'report', ok: false, ms: Date.now() - started, turns: 0 });
+        return input;
+      }
+      const turns = input.value.turns.length;
       const result = await request(buildReportMessages(input.value), false, signal);
-      if (!result.ok) return result;
+      if (!result.ok) {
+        log?.({ event: 'report', ok: false, ms: Date.now() - started, turns });
+        return result;
+      }
       const content = result.value.content;
-      if (typeof content !== 'string' || !content.trim()) return { ok: false, reason: '보고서를 받지 못했습니다. 다시 시도해 주세요.' };
-      return { ok: true, value: content.trim().slice(0, LIMITS.report).trim() };
+      if (typeof content !== 'string' || !content.trim()) {
+        log?.({ event: 'report', ok: false, ms: Date.now() - started, turns });
+        return { ok: false, reason: '보고서를 받지 못했습니다. 다시 시도해 주세요.' };
+      }
+      const report = content.trim().slice(0, LIMITS.report).trim();
+      log?.({ event: 'report', ok: true, ms: Date.now() - started, turns, reportChars: report.length });
+      return { ok: true, value: report };
     },
   };
 }

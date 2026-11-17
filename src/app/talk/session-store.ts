@@ -1,6 +1,6 @@
 import type { TalkClient, TalkPhase, TalkSession, TutorReply, TutorGender, TutorMood } from '../../domain/talk/types.ts';
 import type { Result } from '../../domain/chat.ts';
-import { createSession, normalizeSession, canAddTurn, LIMITS, isTutorGender } from '../../domain/talk/session.ts';
+import { createSession, normalizeSession, canAddTurn, LIMITS, isTutorGender, record, text } from '../../domain/talk/session.ts';
 
 export const TALK_LIMITS = LIMITS;
 export interface TalkView {
@@ -15,6 +15,23 @@ export function initialState(): TalkView { return { selectedTutor: 'f', session:
 export function restoreSession(value: unknown): TalkSession | null {
   const session = normalizeSession(value);
   return session?.turns.length ? session : null;
+}
+/** Local completion metadata stays outside the session sent to the BFF. */
+export function persistTalkView(view: TalkView) {
+  const finished = view.phase === 'ended';
+  return { session: view.session, finished, report: finished ? view.report : undefined };
+}
+export function restoreTalkView(value: unknown): TalkView {
+  const initial = initialState();
+  if (!record(value)) return initial;
+  const session = restoreSession(value.session);
+  if (!session) return initial;
+  const view = { ...initial, session, selectedTutor: session.tutor };
+  // Older snapshots have no completion flag and represent resumable sessions.
+  if (value.finished !== true) return view;
+  const report = text(value.report, LIMITS.report) ? value.report : undefined;
+  return { ...view, phase: 'ended', report,
+    error: report ? '' : '저장된 보고서를 읽지 못했습니다. 새 연습을 시작해 주세요.' };
 }
 export const isBusy = (view: TalkView) => view.phase === 'thinking' || view.phase === 'reporting';
 export function activeTutorMood(view: TalkView): TutorMood {

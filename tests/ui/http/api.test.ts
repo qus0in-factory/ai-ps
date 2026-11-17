@@ -9,6 +9,7 @@ describe('Given the Hono API', () => {
   it('When the old singular Queens API is requested Then returns 404 without an alias', async () => {
     const api = createApi({
       adventure: { start: unusedReply, turn: unusedReply }, reply: unusedReply, queens: unusedQueens,
+      talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } },
     });
     for (const method of ['GET', 'POST']) {
       const response = await api.request('/api/queen/generate', {
@@ -19,7 +20,7 @@ describe('Given the Hono API', () => {
     }
   });
   it('When an API path is unknown Then returns a 404 problem', async () => {
-    const response = await createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: unusedReply, queens: unusedQueens }).request('/api/missing');
+    const response = await createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: unusedReply, queens: unusedQueens, talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } } }).request('/api/missing');
     assert.equal(response.status, 404);
     assert.equal(response.headers.get('Content-Type'), 'application/problem+json');
     assert.equal((await response.json()).instance, '/api/missing');
@@ -35,7 +36,7 @@ describe('Given the Hono API', () => {
         await new Promise<void>(resolve => signal!.addEventListener('abort', () => { aborted(); resolve(); }, { once: true }));
         return { ok: false, reason: '중단됨' };
       },
-    } });
+    }, talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } } });
     const response = await api.request('/api/queens/generate', { method: 'POST', body: '{"size":5}' });
     const reader = response.body!.getReader();
     await reader.read();

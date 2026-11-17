@@ -18,6 +18,7 @@ import { createOpenAICompletion } from './src/infra/openai.ts';
 import { createApi } from './src/ui/http/api.ts';
 import { createTutor } from './src/app/talk/tutor.ts';
 import { createOpenAITranscriber } from './src/infra/openai-transcribe.ts';
+import { createTalkLogger } from './src/infra/talk-logger.ts';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_']);
@@ -29,9 +30,9 @@ export default defineConfig(({ mode }) => {
   const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
   const listener = getRequestListener(createApi({
-    talk: { tutor: createTutor(model), transcriber: createOpenAITranscriber({
+    talk: { tutor: createTutor(model, { log: createTalkLogger(logger) }), transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
-    }) },
+    }), log: createTalkLogger(logger) },
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),

@@ -57,7 +57,7 @@ export function TalkWidget(props: { client: TalkClient; store: TalkStore }) {
       <section class="talk-current-tutor" aria-label="현재 튜터">
         <TutorPortrait tutor={view().session?.tutor ?? view().selectedTutor} mood={activeTutorMood(view())} />
         <div><strong>{(view().session?.tutor ?? view().selectedTutor) === 'f' ? '여성 튜터' : '남성 튜터'}</strong>
-          <p>{busy() ? '잠시만요, 생각하고 있어요.' : '당신의 이야기를 듣고 있어요.'}</p></div>
+          <p>{busy() ? '잠시만요, 생각하고 있어요.' : view().phase === 'ended' ? '연습을 마쳤어요. 다음 연습에서 만나요.' : '당신의 이야기를 듣고 있어요.'}</p></div>
       </section>
     </Show>
     <Show when={view().session}>{session => <>

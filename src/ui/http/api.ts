@@ -6,7 +6,7 @@ import type { Reply } from '../../app/chat.ts';
 import { createProblem } from '../../app/problem.ts';
 import type { QueensGenerator } from '../../domain/queens/generation.ts';
 import type { Tutor, Reporter } from '../../domain/talk/types.ts';
-import { parseTurnRequest, parseReportRequest } from '../../app/talk/tutor.ts';
+import { parseTurnRequest, parseReportRequest, type TalkLogListener } from '../../app/talk/tutor.ts';
 import type { Transcriber } from '../../domain/talk/transcription.ts';
 import { validateTranscriptionAudio } from '../../app/talk/transcribe.ts';
 
@@ -14,7 +14,7 @@ export interface ApiDependencies {
   reply: Reply;
   queens: QueensGenerator;
   adventure: GameMaster;
-  talk?: { tutor: Tutor & Reporter; transcriber?: Transcriber };
+  talk: { tutor: Tutor & Reporter; transcriber?: Transcriber; log?: TalkLogListener };
 }
 
 type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; status: number; detail: string };
@@ -157,8 +157,10 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
     if (entries.length !== 1 || entries[0]![0] !== 'audio') return problem(400, 'audio 파일 하나만 필요합니다.', c.req.path);
     const input = validateTranscriptionAudio(entries[0]![1]);
     if (!input.ok) return problem(input.status, input.reason, c.req.path);
-    if (!talk?.transcriber) return problem(502, '음성 인식 서비스를 사용할 수 없습니다.', c.req.path);
+    if (!talk.transcriber) return problem(502, '음성 인식 서비스를 사용할 수 없습니다.', c.req.path);
+    const started = Date.now();
     const result = await talk.transcriber.transcribe(input.value, c.req.raw.signal);
+    talk.log?.({ event: 'transcribe', ok: result.ok, ms: Date.now() - started, inputBytes: input.value.size, outputChars: result.ok ? result.value.length : undefined });
     return result.ok ? c.json({ text: result.value }, 200, { 'Cache-Control': 'no-store' })
       : problem(502, '음성을 인식하지 못했습니다. 잠시 후 다시 시도해주세요.', c.req.path);
   });

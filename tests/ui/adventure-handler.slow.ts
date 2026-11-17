@@ -6,7 +6,7 @@ import { createSession } from '../../src/domain/adventure/session.ts';
 import type { FunctionCompletionGateway } from '../../src/domain/completion.ts';
 const unused = async (): Promise<never> => { throw new Error('Unexpected call'); };
 const payload = JSON.stringify({ narrative: '너는 문을 연다.', statChanges: {}, addItems: [], removeItems: [] });
-function api(model: FunctionCompletionGateway) { return createApi({ reply: unused, queens: { generate: unused }, adventure: createGameMaster(model, { random: () => 0.5 }) }); }
+function api(model: FunctionCompletionGateway) { return createApi({ reply: unused, queens: { generate: unused }, adventure: createGameMaster(model, { random: () => 0.5 }), talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } } }); }
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 describe('Given the adventure HTTP handlers', () => {
@@ -70,7 +70,7 @@ describe('Given hostile adventure payloads and serialization failures', () => {
     const server = createApi({ reply: unused, queens: { generate: unused }, adventure: {
       start: unused,
       turn: async (_session, action, onEvent) => { onEvent?.({ kind: 'accepted', action }); return { ok: true, value: cyclic as never }; },
-    } });
+    }, talk: { tutor: { respond: async () => ({ ok: false as const, reason: 'unused' }), report: async () => ({ ok: false as const, reason: 'unused' }) } } });
     const response = await server.request('/api/adventure/turn', post({ session: createSession(), action: '대기' }));
     const frames = (await response.text()).trim().split('\n').map(line => JSON.parse(line));
     assert.deepEqual(frames.map(f => f.type), ['event','problem']); assert.equal(frames[1].problem.status, 500);
