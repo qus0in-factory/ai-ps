@@ -6,3 +6,4 @@
 - 코드는 `src/`의 `ui/app/domain/infra` 레이어(의존은 ui→app→domain, infra는 app이 주입, `tests/arch`가 강제). TDD/BDD로 `tests/`에 테스트 먼저 작성 — `layered-tdd` 스킬.
 - 완료 조건: `pnpm test`·`pnpm typecheck`·`pnpm build` 통과.
 - 작업 완료 보고는 Discord로 — `discord-notify` 스킬, 절차·스크립트는 `docs/harness/operations.md`.
+- 에이전트 구성·역할·effort·지시 템플릿은 `docs/harness/agents.md`, 워커 열기·릴리스·배포·pnpm과 공개 노출 변경 배포의 리뷰 게이트는 `docs/harness/operations.md` 스크립트(`scripts/`) 기준.
