@@ -4,7 +4,7 @@ import { DEFAULT_URL, fail, cli, parseOptions } from './lib/command.mjs';
 
 export async function smoke(args, { fetcher = fetch, table = console.table } = {}) {
   if (args.includes('--help')) {
-    console.log('smoke.mjs [url] [--llm] [--dry-run] [--timeout-ms N]\nDefault: GET /, /queen, /chat only. --llm adds POST /api/chat: a real LLM call (cost/logs), only on request. Only lengths and content presence are printed, never response text.\n.env is not required here; deploy requires .env unless --skip-secrets is used. PNPM_STORE_DIR overrides the store for release/deploy. Requests have a 90 second limit; --timeout-ms can shorten it.');
+    console.log('smoke.mjs [url] [--llm] [--dry-run] [--timeout-ms N]\nDefault: GET /, /queens, /chat only. --llm adds POST /api/chat: a real LLM call (cost/logs), only on request. Only lengths and content presence are printed, never response text.\n.env is not required here; deploy requires .env unless --skip-secrets is used. PNPM_STORE_DIR overrides the store for release/deploy. Requests have a 90 second limit; --timeout-ms can shorten it.');
     return true;
   }
   const { values, timeoutMs } = parseOptions(args, ['--dry-run', '--llm']);
@@ -16,7 +16,7 @@ export async function smoke(args, { fetcher = fetch, table = console.table } = {
     base = new URL(positional[0] ?? DEFAULT_URL);
     if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password || base.pathname !== '/' || base.search || base.hash) throw new Error();
   } catch { fail('usage', 'expected an http(s) origin without credentials, path, query or fragment'); }
-  const paths = ['/', '/queen', '/chat', ...(values.includes('--llm') ? ['/api/chat'] : [])];
+  const paths = ['/', '/queens', '/chat', ...(values.includes('--llm') ? ['/api/chat'] : [])];
   const rows = await Promise.all(paths.map(async path => {
     const method = path === '/api/chat' ? 'POST' : 'GET';
     if (dry) return { method, path, status: '-', result: 'PLAN', length: 0, contentPresent: false };

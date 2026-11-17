@@ -30,7 +30,7 @@ describe('Given the default fast deployment checks', () => {
         }, table: values => { rows = values; },
       }), true);
       assert.deepEqual(calls, [
-        { path: '/', method: 'GET' }, { path: '/queen', method: 'GET' }, { path: '/chat', method: 'GET' },
+        { path: '/', method: 'GET' }, { path: '/queens', method: 'GET' }, { path: '/chat', method: 'GET' },
         ...(llm ? [{ path: '/api/chat', method: 'POST' }] : []),
       ]);
       assert.equal(rows.length, llm ? 4 : 3);

@@ -10,7 +10,7 @@ describe('Given the Queens streaming client', () => {
     const generated = { puzzle, solution: solveQueens(puzzle).solutions[0], attempts: 1 };
     const received: unknown[] = [];
     const generator = createHttpQueensGenerator(async (url, options) => {
-      assert.equal(url, '/api/queen/generate');
+      assert.equal(url, '/api/queens/generate');
       assert.deepEqual(JSON.parse(options!.body as string), { size: 5 });
       const bytes = new TextEncoder().encode(JSON.stringify({ type: 'event', event: { kind: 'attempt', attempt: 1, retry: 0 } }) + '\n' + JSON.stringify({ type: 'result', value: generated }) + '\n');
       return new Response(new ReadableStream({

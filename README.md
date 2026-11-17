@@ -18,7 +18,7 @@
 ```mermaid
 flowchart LR
   subgraph Browser
-    UI["ui · SolidJS<br/>/chat · /queen"]
+    UI["ui · SolidJS<br/>/chat · /queens"]
   end
   subgraph Server["Vite dev server + Hono /api"]
     API["ui/http · Hono API"]

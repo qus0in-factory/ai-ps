@@ -10,9 +10,9 @@ import { App } from './ui/App.tsx';
 import './ui/styles/global.css';
 
 const chat = createChat(createHttpChat(), createLocalChatMemory());
-const queen = createGenerationController(createHttpQueensGenerator());
+const queens = createGenerationController(createHttpQueensGenerator());
 const adventureStore = createAdventureStore();
 const adventure = createHttpAdventure();
 render(() => (
-  <App chat={chat} queen={queen} adventure={adventure} adventureStore={adventureStore} />
+  <App chat={chat} queens={queens} adventure={adventure} adventureStore={adventureStore} />
 ), document.getElementById('root')!);

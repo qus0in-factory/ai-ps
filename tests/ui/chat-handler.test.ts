@@ -4,7 +4,7 @@ import { createApi } from '../../src/ui/http/api.ts';
 import { createReply, type Reply } from '../../src/app/chat.ts';
 
 async function request(method: string, body: string, reply: Reply, accept = '') {
-  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply, queen: { generate: async () => { throw new Error('Unexpected Queens request'); } } });
+  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply, queens: { generate: async () => { throw new Error('Unexpected Queens request'); } } });
   const response = await api.request('/api/chat', {
     method, headers: { 'Content-Type': 'application/json', Accept: accept },
     ...(method === 'GET' ? {} : { body }),

@@ -10,7 +10,7 @@ export function createHttpQueensGenerator(fetcher: typeof fetch = fetch): Queens
       const timeout = AbortSignal.timeout(300_000);
       const signal = externalSignal ? AbortSignal.any([timeout, externalSignal]) : timeout;
       try {
-        const response = await fetcher('/api/queen/generate', { method: 'POST', signal,
+        const response = await fetcher('/api/queens/generate', { method: 'POST', signal,
           headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson, application/problem+json' },
           body: JSON.stringify({ size }),
         });

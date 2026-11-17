@@ -8,7 +8,7 @@ import type { QueensGenerator } from '../../domain/queens/generation.ts';
 
 export interface ApiDependencies {
   reply: Reply;
-  queen: QueensGenerator;
+  queens: QueensGenerator;
   adventure: GameMaster;
 }
 
@@ -87,7 +87,7 @@ function progress(instance: string, failure: string, signal: AbortSignal, run: (
   });
 }
 
-export function createApi({ reply, queen, adventure }: ApiDependencies) {
+export function createApi({ reply, queens, adventure }: ApiDependencies) {
   const api = new Hono();
   const limit = (maxSize: number, detail: string) => bodyLimit({ maxSize, onError: c => problem(413, detail, c.req.path) });
   const postOnly = (path: string) => api.all(path, () => problem(405, 'POST 요청만 가능합니다.', path, { Allow: 'POST' }));
@@ -105,19 +105,19 @@ export function createApi({ reply, queen, adventure }: ApiDependencies) {
   });
   postOnly('/api/chat');
 
-  api.post('/api/queen/generate', limit(10_000, '요청이 너무 큽니다.'), async c => {
+  api.post('/api/queens/generate', limit(10_000, '요청이 너무 큽니다.'), async c => {
     const body = await readJson(c.req.raw);
-    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', '/api/queen/generate');
+    if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', '/api/queens/generate');
     const size = body.value && typeof body.value === 'object' && 'size' in body.value ? body.value.size : undefined;
     if (typeof size !== 'number' || !Number.isInteger(size) || size < 5 || size > 9) {
-      return problem(400, '크기는 5~9의 정수여야 합니다.', '/api/queen/generate');
+      return problem(400, '크기는 5~9의 정수여야 합니다.', '/api/queens/generate');
     }
-    return progress('/api/queen/generate', '퍼즐 생성 요청을 처리하지 못했습니다.', c.req.raw.signal, async (frame, signal) => {
-      const result = await queen.generate(size, event => frame({ type: 'event', event }), signal);
+    return progress('/api/queens/generate', '퍼즐 생성 요청을 처리하지 못했습니다.', c.req.raw.signal, async (frame, signal) => {
+      const result = await queens.generate(size, event => frame({ type: 'event', event }), signal);
       return result.ok ? { ok: true, frame: { type: 'result', value: result.value } } : { ok: false, status: 502, detail: result.reason };
     });
   });
-  postOnly('/api/queen/generate');
+  postOnly('/api/queens/generate');
 
   api.post('/api/adventure/start', limit(1_000, '요청이 너무 큽니다.'), async c => {
     const body = await readJson(c.req.raw);

@@ -32,7 +32,7 @@
 - 릴리스와 이어 하는 빠른 경로: 리뷰 게이트 → `pnpm release <버전>`(test·typecheck·build·태그 푸시) → `pnpm run deploy --skip-build` → workers.dev URL과 GET 스모크 확인 → Discord 보고. 별도 사전 build를 반복하지 않는다. 이미 검증·빌드를 마친 뒤 배포하는 다른 절차에서도 `--skip-build`를 사용하되, 빌드 이후 소스를 바꾸었다면 다시 빌드한다.
 - `pnpm run deploy`(`scripts/deploy.mjs`)가 build 1회 → 앱 키 secret 동기화 → `wrangler deploy` → URL·Version 파싱 → GET 스모크까지 이어 한다. 수동 `wrangler secret bulk`는 쓰지 않는다. `--skip-build`·`--skip-secrets`·`--dry-run` 지원. 첫 배포(Worker 미존재)로 `wrangler secret list`가 실패하면 원격 키 비교만 건너뛴다.
 - secret은 `.env`의 앱 키만 올린다: `OPENAI_API_KEY`·`OPENAI_MODEL`·`OPENAI_TOOL_MODE`·`OWM_API_KEY`, 있으면 `OPENAI_BASE_URL`·`LOG_LEVEL`. `DISCORD_WEBHOOK_URL`은 올리지 않고, 값은 출력하지 않는다. JSON은 stdin으로 전달하며 임시 secret 파일은 만들지 않는다.
-- 기본 스모크(`pnpm smoke <url>`, URL 생략 시 운영 URL)는 `/`·`/queen`·`/chat`의 GET 200만 확인한다. 요청받았을 때만 `pnpm smoke <url> --llm`으로 `POST /api/chat`의 `content` 포함 JSON을 추가 확인한다. 이 POST는 실제 LLM 호출이라 비용·로그가 발생한다. 응답 본문은 길이·존재 여부만 출력한다.
+- 기본 스모크(`pnpm smoke <url>`, URL 생략 시 운영 URL)는 `/`·`/queens`·`/chat`의 GET 200만 확인한다. 요청받았을 때만 `pnpm smoke <url> --llm`으로 `POST /api/chat`의 `content` 포함 JSON을 추가 확인한다. 이 POST는 실제 LLM 호출이라 비용·로그가 발생한다. 응답 본문은 길이·존재 여부만 출력한다.
 - 공개 URL에는 현재 인증·rate limit이 없다(2026-11-17). 변경 시 이 줄을 갱신한다.
 
 ### 배포 전 리뷰 게이트

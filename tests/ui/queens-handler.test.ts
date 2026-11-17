@@ -4,8 +4,8 @@ import { createApi } from '../../src/ui/http/api.ts';
 import type { QueensGenerator } from '../../src/domain/queens/generation.ts';
 
 async function request(body: string, generator: QueensGenerator, method = 'POST') {
-  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: async () => { throw new Error('Unexpected chat request'); }, queen: generator });
-  const response = await api.request('/api/queen/generate', {
+  const api = createApi({ adventure: { start: async () => { throw new Error('Unexpected adventure'); }, turn: async () => { throw new Error('Unexpected adventure'); } }, reply: async () => { throw new Error('Unexpected chat request'); }, queens: generator });
+  const response = await api.request('/api/queens/generate', {
     method, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body }),
   });
   return { status: response.status, headers: { 'Content-Type': response.headers.get('Content-Type') }, payload: await response.text() };
@@ -18,7 +18,7 @@ describe('Given the Queens generation endpoint', () => {
       const result = await request(body, generator);
       assert.equal(result.status, 400);
       assert.equal(result.headers['Content-Type'], 'application/problem+json');
-      assert.equal(JSON.parse(result.payload).instance, '/api/queen/generate');
+      assert.equal(JSON.parse(result.payload).instance, '/api/queens/generate');
     }
     assert.equal((await request('{}', generator, 'GET')).status, 405);
   });
@@ -32,6 +32,7 @@ describe('Given the Queens generation endpoint', () => {
     assert.equal(frames[0].type, 'event');
     assert.equal(frames[1].type, 'problem');
     assert.equal(frames[1].problem.status, 502);
+    assert.equal(frames[1].problem.instance, '/api/queens/generate');
     assert.equal(result.headers['Content-Type'], 'application/x-ndjson; charset=utf-8');
   });
 });

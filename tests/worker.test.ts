@@ -8,7 +8,7 @@ function environment(): Env {
 
 describe('Given the Workers composition root', () => {
   it('When a SPA route is requested Then delegates the original request to the assets binding', async () => {
-    const request = new Request('https://ai-ps.test/queen?size=5');
+    const request = new Request('https://ai-ps.test/queens?size=5');
     let received: Request | undefined;
     const response = await worker.fetch(request, {
       ASSETS: { fetch: async input => { received = input; return new Response('spa'); } },
@@ -22,10 +22,11 @@ describe('Given the Workers composition root', () => {
     const method = await worker.fetch(new Request('https://ai-ps.test/api/chat'), env);
     assert.equal(method.status, 405);
     assert.equal(method.headers.get('Allow'), 'POST');
-    const invalid = await worker.fetch(new Request('https://ai-ps.test/api/queen/generate', {
+    const invalid = await worker.fetch(new Request('https://ai-ps.test/api/queens/generate', {
       method: 'POST', body: JSON.stringify({ size: 2 }),
     }), env);
     assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).instance, '/api/queens/generate');
     const adventure = await worker.fetch(new Request('https://ai-ps.test/api/adventure/turn', { method: 'POST', body: '{}' }), env);
     assert.equal(adventure.status, 400);
     const missing = await worker.fetch(new Request('https://ai-ps.test/api/unknown'), env);

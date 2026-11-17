@@ -37,7 +37,7 @@ export default {
     return createApi({
       reply: createReply(createGateway(model, tools, createToolLogger(logger))),
       adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
-    queen: createQueensGenerator(model, { log: createQueensLogger(logger) }),
+    queens: createQueensGenerator(model, { log: createQueensLogger(logger) }),
     }).fetch(request);
   },
 };
