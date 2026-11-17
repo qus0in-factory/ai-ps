@@ -7,4 +7,4 @@
 - 완료 조건: `pnpm test`·`pnpm typecheck`·`pnpm build` 통과.
 - 작업 완료 보고는 Discord로 — `discord-notify` 스킬, 절차·스크립트는 `docs/harness/operations.md`.
 - 에이전트 구성·역할·effort·지시 템플릿은 `docs/harness/agents.md`, 워커 열기·릴리스·배포·pnpm과 공개 노출 변경 배포의 리뷰 게이트는 `docs/harness/operations.md` 스크립트(`scripts/`) 기준.
-- `/adventure` 작업 시 `docs/adventure/` 먼저(이미지 재분석 금지).
+- `/adventure`·`/talk` 작업 시 `docs/adventure/`·`docs/talk/` 먼저(책 이미지 재분석 금지).
