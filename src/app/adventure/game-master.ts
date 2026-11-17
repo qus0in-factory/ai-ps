@@ -3,7 +3,7 @@ import type { Result } from '../../domain/chat.ts';
 import type { AdventureSession, AdventureListener, GameMaster } from '../../domain/adventure/types.ts';
 import type { AdventureLogListener } from '../../domain/adventure/logging.ts';
 import { createSession, normalizeSession, MAX_TURNS, record, text } from '../../domain/adventure/session.ts';
-import { buildTurnMessages, journalEntry, trimHistory } from '../../domain/adventure/history.ts';
+import { buildTurnMessages, trimHistory } from '../../domain/adventure/history.ts';
 import { parseTurnOutcome } from '../../domain/adventure/outcome.ts';
 import { applyTurn } from '../../domain/adventure/rules.ts';
 import { DICE_TOOL, rollDice } from '../../domain/adventure/dice.ts';
@@ -15,22 +15,14 @@ export function parseAdventureTurn(body: unknown): Result<{ session: AdventureSe
   return { ok: true, value: { session, action: body.action.trim() } };
 }
 export function isAdventureStart(body: unknown): boolean { return record(body) && Object.keys(body).length === 0; }
-function narrate(narrative: string, onEvent?: AdventureListener) {
-  const parts = (narrative.match(/[^。.!?\n]+[。.!?\n]*/g) ?? [narrative]).filter(part => part.trim());
-  if (!parts.length) parts.push(narrative.trim());
-  const chunks = parts.length > 8 ? [...parts.slice(0,7), parts.slice(7).join('')] : parts;
-  chunks.forEach((part,index) => onEvent?.({ kind: 'narrative', index, text: part, final: index === chunks.length - 1 }));
-}
-export function createGameMaster(model: FunctionCompletionGateway, { random = Math.random, log, temperature, maxToolRounds = 3, maxCompletionTokens = 1600, deadlineMs = 90_000 }: {
-  random?: () => number; log?: AdventureLogListener; temperature?: number | string; maxToolRounds?: number; maxCompletionTokens?: number; deadlineMs?: number;
+export function createGameMaster(model: FunctionCompletionGateway, { random = Math.random, log, temperature }: {
+  random?: () => number; log?: AdventureLogListener; temperature?: number | string;
 } = {}): GameMaster {
   const numericTemperature = typeof temperature === 'string' ? (temperature.trim() ? Number(temperature) : undefined) : temperature;
   const temp = numericTemperature !== undefined && Number.isFinite(numericTemperature) && numericTemperature >= 0 && numericTemperature <= 2 ? numericTemperature : undefined;
-  const rounds = Number.isFinite(maxToolRounds) ? Math.max(0, Math.min(3, Math.floor(maxToolRounds))) : 3;
   const cancelled = () => ({ ok: false as const, reason: '모험 요청이 중단되었습니다.' });
-  const tokens = Number.isFinite(maxCompletionTokens) ? Math.max(128, Math.min(4096, Math.floor(maxCompletionTokens))) : 1600;
   const deadline = (signal?: AbortSignal) => {
-    const timeout = AbortSignal.timeout(Number.isFinite(deadlineMs) ? Math.max(1, Math.min(90_000, Math.floor(deadlineMs))) : 90_000);
+    const timeout = AbortSignal.timeout(90_000);
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
   };
   async function request(messages: CompletionMessage[], signal?: AbortSignal, tools = [DICE_TOOL]) {
@@ -41,7 +33,7 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
         cancel = () => resolve(cancelled());
         signal?.addEventListener('abort', cancel, { once: true });
       });
-      const result = await Promise.race([model.complete(messages, tools, { max_completion_tokens: tokens, response_format: { type: 'json_object' }, ...(temp === undefined ? {} : { temperature: temp }), ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
+      const result = await Promise.race([model.complete(messages, tools, { max_completion_tokens: 1600, response_format: { type: 'json_object' }, ...(temp === undefined ? {} : { temperature: temp }), ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
       if (result.ok && (typeof result.value.content === 'string' && result.value.content.length > 16_000)) return { ok: false as const, reason: '모험 응답 크기 제한을 초과했습니다.' };
       return result;
     } catch { return { ok: false as const, reason: '모험 응답을 가져오지 못했습니다.' }; }
@@ -58,8 +50,8 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
       if (!response.ok) { log?.({ event: 'model_error', turn: 0 }); return response; }
       const parsed = parseTurnOutcome(response.value.content ?? '');
       if (!parsed.ok) return parsed;
-      narrate(parsed.value.narrative, onEvent);
-      onEvent?.({ kind: 'state', state: session.state, applied: { stats: { health: 0, warmth: 0, focus: 0 }, added: [], removed: [], repaired: [], rejected: [], slept: false } });
+      onEvent?.({ kind: 'narrative', text: parsed.value.narrative });
+      onEvent?.({ kind: 'state', state: session.state, applied: { stats: { health: 0, warmth: 0, focus: 0 }, added: [], removed: [], repaired: [], slept: false } });
       log?.({ event: 'turn_complete', turn: 0, narrativeLength: parsed.value.narrative.length });
       return { ok: true, value: session };
     },
@@ -72,14 +64,14 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
       signal = deadline(signal);
       onEvent?.({ kind: 'accepted', action });
       const messages = buildTurnMessages(session, action);
-      let content = '', diceUsed = false;
-      for (let round = 0; round <= rounds; round++) {
+      let content = '';
+      for (let round = 0; round <= 3; round++) {
         log?.({ event: 'model_request', turn: session.turn + 1, round });
         const response = await request(messages, signal);
         if (signal?.aborted) return cancelled();
         if (!response.ok) { log?.({ event: 'model_error', turn: session.turn + 1 }); return response; }
         content = response.value.content ?? '';
-        if (!response.value.tool_calls?.length || round === rounds) break;
+        if (!response.value.tool_calls?.length || round === 3) break;
         const calls = response.value.tool_calls.slice(0, 2).filter(call => call && text(call.id, 80) && call.function && text(call.function.name, 64) && text(call.function.arguments, 512));
         messages.push({ role: 'assistant', content: response.value.content, tool_calls: calls });
         for (const call of calls) {
@@ -90,19 +82,17 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
               if (record(args)) output = rollDice(args.sides, args.difficulty, random);
             } catch { output = { ok: false, reason: '주사위 인수는 올바른 JSON 객체여야 합니다.' }; }
           }
-          if (output.ok) { diceUsed = true; onEvent?.({ kind: 'dice', ...output.value }); log?.({ event: 'dice', turn: session.turn + 1, round }); }
+          if (output.ok) { onEvent?.({ kind: 'dice', ...output.value }); log?.({ event: 'dice', turn: session.turn + 1, round }); }
           messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
         }
       }
       const parsed = parseTurnOutcome(content);
       if (!parsed.ok) { onEvent?.({ kind: 'invalid', reason: parsed.reason }); log?.({ event: 'invalid', turn: session.turn + 1 }); return { ok: true, value: { ...session, turn: session.turn + 1 } }; }
-      const { state, applied } = applyTurn(session.state, parsed.value, { diceUsed });
-      narrate(parsed.value.narrative, onEvent);
+      const { state, applied } = applyTurn(session.state, parsed.value);
+      onEvent?.({ kind: 'narrative', text: parsed.value.narrative });
       onEvent?.({ kind: 'state', state, applied });
       if (state.ending) onEvent?.({ kind: 'ending', ending: state.ending, day: state.day });
-      // Keep applied rejections visible in the very next prompt, without model summaries.
       const updated = trimHistory({ ...session, state, turn: session.turn + 1,
-        journal: [...session.journal, journalEntry(session.state, action, applied)],
         recent: [...session.recent, { action, narrative: parsed.value.narrative.slice(0,400) }],
       });
       log?.({ event: 'turn_complete', turn: updated.turn, narrativeLength: parsed.value.narrative.length });

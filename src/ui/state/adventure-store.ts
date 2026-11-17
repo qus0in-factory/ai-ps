@@ -18,10 +18,9 @@ import type { AdventureEvent, AdventureSession } from '../../domain/adventure/ty
 export type AdventureStoreActions = {
   beginStart(): void;
   beginTurn(): void;
-  /** request 를 주면 그 세대의 이벤트만 반영한다(늦게 도착한 이전 요청 무시). */
-  applyEvent(event: AdventureEvent, request?: number): void;
-  commit(session: AdventureSession, request?: number): void;
-  fail(reason: string, request?: number): void;
+  applyEvent(event: AdventureEvent): void;
+  commit(session: AdventureSession): void;
+  fail(reason: string): void;
   reset(): void;
 };
 
@@ -38,11 +37,10 @@ export function createAdventureStore(storageKey: string = ADVENTURE_STORAGE_KEY)
         ...initialState(),
         beginStart: () => set(beginStartView(get())),
         beginTurn: () => set(beginTurnView(get())),
-        applyEvent: (event, request) => set(reduceEvent(get(), event, request)),
-        commit: (session, request) => set(commitView(get(), session, request)),
-        fail: (reason, request) => set(failView(get(), reason, request)),
-        // 새 게임도 요청 세대를 올려, 진행 중이던 이전 요청의 늦은 결과를 무시한다.
-        reset: () => set({ ...resetView(), request: get().request + 1 }),
+        applyEvent: (event) => set(reduceEvent(get(), event)),
+        commit: (session) => set(commitView(get(), session)),
+        fail: (reason) => set(failView(get(), reason)),
+        reset: () => set(resetView()),
       }),
       {
         name: storageKey,

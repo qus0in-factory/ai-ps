@@ -8,7 +8,7 @@ const state: GameState = {
   stats: { health: 70, warmth: 40, focus: 55 },
   inventory: ['matches'], repairs: { lens: false, clockwork: false, oil: false },
 };
-const session: AdventureSession = { version: 1, state, journal: [], recent: [], turn: 3 };
+const session: AdventureSession = { version: 1, state, recent: [], turn: 3 };
 
 function fakeStorage(seed: Record<string, string> = {}) {
   const data = new Map(Object.entries(seed));
@@ -84,7 +84,7 @@ describe('Given an adventure store wired to the reducer', () => {
     store.getState().applyEvent({
       kind: 'state',
       state: { ...state, location: 'boathouse' },
-      applied: { stats: { health: 0, warmth: -6, focus: -4 }, added: [], removed: [], repaired: [], rejected: [], slept: false },
+      applied: { stats: { health: 0, warmth: -6, focus: -4 }, added: [], removed: [], repaired: [], slept: false },
     });
     assert.equal(store.getState().session, session);
     assert.equal(store.getState().preview?.location, 'boathouse');
@@ -98,37 +98,14 @@ describe('Given an adventure store wired to the reducer', () => {
     assert.equal(store.getState().session?.turn, 4);
     assert.equal(store.getState().preview, undefined);
   });
-  it('When a late result arrives after 새 게임 Then it cannot overwrite the new state', () => {
-    useStorage({});
-    const store = createAdventureStore('test.late');
-    store.getState().commit(session);
-    store.getState().beginTurn();
-    const request = store.getState().request;
-    store.getState().reset(); // 새 게임: 세션 비우고 세대 증가
-    store.getState().commit({ ...session, turn: 9 }, request);
-    assert.equal(store.getState().session, null);
-    assert.equal(store.getState().log.length, 0);
-  });
-  it('When a late failure arrives after 새 게임 Then no error is shown', () => {
-    useStorage({});
-    const store = createAdventureStore('test.latefail');
-    store.getState().commit(session);
-    store.getState().beginTurn();
-    const request = store.getState().request;
-    store.getState().reset();
-    store.getState().fail('늦은 실패', request);
-    assert.equal(store.getState().error, '');
-    assert.equal(store.getState().phase, 'idle');
-  });
   it('When an ending event arrives and the request fails Then the temporary ending is cleared', () => {
     useStorage({});
     const store = createAdventureStore('test.endingfail');
     store.getState().commit(session);
     store.getState().beginTurn();
-    const request = store.getState().request;
-    store.getState().applyEvent({ kind: 'ending', ending: 'missed', day: 6 }, request);
+    store.getState().applyEvent({ kind: 'ending', ending: 'missed', day: 6 });
     assert.equal(store.getState().phase, 'ended');
-    store.getState().fail('연결 종료', request);
+    store.getState().fail('연결 종료');
     assert.equal(store.getState().ending, undefined);
     assert.equal(store.getState().phase, 'idle');
     assert.equal(store.getState().session, session);

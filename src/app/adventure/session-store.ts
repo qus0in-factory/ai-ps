@@ -22,12 +22,11 @@ export interface AdventureLogEntry {
   invalid?: boolean;
 }
 
-/** 진행 중인 턴의 스트림 조각. result 를 받으면 로그로 확정된다. */
+/** 진행 중인 턴. result 를 받으면 로그로 확정된다. */
 export interface StreamingTurn {
   action: string;
   text: string;
   dice: DiceRoll[];
-  fragments: string[];
 }
 
 export type AdventurePhase = 'idle' | 'starting' | 'turn' | 'ended';
@@ -43,8 +42,6 @@ export interface AdventureView {
   streaming?: StreamingTurn;
   phase: AdventurePhase;
   error: string;
-  /** 요청 세대. 새 게임·새 턴마다 증가해, 늦게 도착한 이전 요청의 결과를 무시한다. */
-  request: number;
   /** 새로 고침으로 복원한 세션의 지난 이야기를 로그에 채웠는지. */
   restored: boolean;
 }
@@ -53,7 +50,7 @@ export const MAX_LOG_ENTRIES = 50;
 export const INVALID_TURN_MESSAGE = '서술을 받지 못했어요. 다른 행동을 입력해 보세요.';
 
 export function initialState(): AdventureView {
-  return { session: null, log: [], phase: 'idle', error: '', request: 0, restored: false };
+  return { session: null, log: [], phase: 'idle', error: '', restored: false };
 }
 
 export function reset(): AdventureView {
@@ -66,17 +63,11 @@ export function restoreSession(value: unknown): AdventureSession | null {
 }
 
 export function beginStart(view: AdventureView): AdventureView {
-  return {
-    ...view, phase: 'starting', error: '', streaming: undefined, preview: undefined,
-    request: view.request + 1, restored: false,
-  };
+  return { ...view, phase: 'starting', error: '', streaming: undefined, preview: undefined, restored: false };
 }
 
 export function beginTurn(view: AdventureView): AdventureView {
-  return {
-    ...view, phase: 'turn', error: '', streaming: undefined, preview: undefined,
-    request: view.request + 1, restored: false,
-  };
+  return { ...view, phase: 'turn', error: '', streaming: undefined, preview: undefined, restored: false };
 }
 
 function pushLog(view: AdventureView, entry: AdventureLogEntry): AdventureLogEntry[] {
@@ -84,7 +75,7 @@ function pushLog(view: AdventureView, entry: AdventureLogEntry): AdventureLogEnt
 }
 
 function emptyStream(): StreamingTurn {
-  return { action: '', text: '', dice: [], fragments: [] };
+  return { action: '', text: '', dice: [] };
 }
 
 /**
@@ -92,12 +83,11 @@ function emptyStream(): StreamingTurn {
  * 이벤트 순서는 accepted → dice* → narrative* → state|invalid → ending? 이다.
  * state 이벤트는 preview(표시 전용)만 바꾸고 session 은 result 의 commit 에서만 교체한다.
  */
-export function reduceEvent(view: AdventureView, event: AdventureEvent, request?: number): AdventureView {
-  if (request !== undefined && request !== view.request) return view;
+export function reduceEvent(view: AdventureView, event: AdventureEvent): AdventureView {
   const stream = view.streaming ?? emptyStream();
   switch (event.kind) {
     case 'accepted':
-      return { ...view, streaming: { action: event.action, text: '', dice: [], fragments: [] } };
+      return { ...view, streaming: { action: event.action, text: '', dice: [] } };
     case 'dice':
       return {
         ...view,
@@ -108,12 +98,9 @@ export function reduceEvent(view: AdventureView, event: AdventureEvent, request?
           }],
         },
       };
-    case 'narrative': {
-      const fragments = [...stream.fragments];
-      fragments[event.index] = event.text;
-      const text = fragments.filter((fragment) => Boolean(fragment)).join(' ');
-      return { ...view, streaming: { ...stream, fragments, text } };
-    }
+    case 'narrative':
+      // 서버가 완성된 서술 1개를 보낸다(문장 조각 스트리밍 없음).
+      return { ...view, streaming: { ...stream, text: event.text } };
     case 'state':
       return {
         ...view,
@@ -149,11 +136,10 @@ export function restoredLog(session: AdventureSession): AdventureLogEntry[] {
 }
 
 /** result 프레임의 세션을 화면 상태의 정본으로 삼는다(서버가 만든 새 세션). */
-export function commit(view: AdventureView, session: AdventureSession, request?: number): AdventureView {
-  if (request !== undefined && request !== view.request) return view;
+export function commit(view: AdventureView, session: AdventureSession): AdventureView {
   // state/invalid 이벤트 없이 끝난 스트림(start 의 첫 장면 등)은 여기서 로그로 확정한다.
   const stream = view.streaming;
-  const log = stream && (stream.text || stream.dice.length || stream.fragments.length)
+  const log = stream && (stream.text || stream.dice.length)
     ? pushLog(view, { action: stream.action, narrative: stream.text, dice: stream.dice })
     : view.log;
   return {
@@ -171,8 +157,7 @@ export function commit(view: AdventureView, session: AdventureSession, request?:
 }
 
 /** result 없이 실패하면 임시 ending·preview·진행 phase 를 정본 세션 기준으로 되돌린다. */
-export function fail(view: AdventureView, reason: string, request?: number): AdventureView {
-  if (request !== undefined && request !== view.request) return view;
+export function fail(view: AdventureView, reason: string): AdventureView {
   const ending = view.session?.state.ending;
   return {
     ...view,

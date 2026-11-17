@@ -2,9 +2,9 @@ import type { AdventureClient, AdventureListener, AdventureSession } from '../do
 import type { Result } from '../domain/chat.ts';
 import { isAdventureSession, isAdventureEvent, record } from '../domain/adventure/session.ts';
 import { readJsonLines } from './json-lines.ts';
-export function createHttpAdventure(fetcher: typeof fetch = fetch, timeoutMs = 120_000): AdventureClient {
+export function createHttpAdventure(fetcher: typeof fetch = fetch): AdventureClient {
   async function send(path: string, body: unknown, onEvent?: AdventureListener, externalSignal?: AbortSignal): Promise<Result<AdventureSession>> {
-    const timeout = AbortSignal.timeout(timeoutMs);
+    const timeout = AbortSignal.timeout(120_000);
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout;
     try {
       const response = await fetcher(path, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body: JSON.stringify(body) });

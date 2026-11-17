@@ -14,6 +14,7 @@ describe('Given a bounded adventure game master', () => {
     const result = await gm.start(e => events.push(e));
     assert.equal(result.ok, true);
     if (result.ok) assert.deepEqual(result.value.state, createSession().state);
+    assert.equal(events.filter(e => e.kind === 'narrative').length, 1);
     assert.equal(events[0]!.kind, 'narrative'); assert.equal(events.at(-1)!.kind, 'state');
   });
   it('When dice are requested Then sends tool results and emits accepted dice narrative state in order', async () => {
@@ -30,7 +31,8 @@ describe('Given a bounded adventure game master', () => {
     const session = createSession();
     const result = await createGameMaster(model, { random: () => 0.5, temperature: '' }).turn(session, ' 창고 뒤지기 ', e => events.push(e), signal);
     assert.equal(result.ok, true);
-    assert.deepEqual(events.map(e => e.kind), ['accepted','dice','narrative','narrative','state']);
+    assert.deepEqual(events.map(e => e.kind), ['accepted','dice','narrative','state']);
+    assert.deepEqual(events.find(e => e.kind === 'narrative'), { kind: 'narrative', text: JSON.parse(answer.content).narrative });
     assert.deepEqual(session, createSession());
     if (result.ok) { assert.equal(result.value.turn, 1); assert.equal(result.value.state.stats.warmth, 49); }
   });
@@ -55,29 +57,6 @@ describe('Given a bounded adventure game master', () => {
     const ended = createSession(); ended.state.ending = 'missed';
     assert.equal((await gm.turn(ended, '대기')).ok, false); assert.equal(calls, 1);
   });
-  it('When a repair is rejected Then retains the full rejection for the next prompt and never sends whitespace-only narrative frames', async () => {
-    const events: AdventureEvent[] = [];
-    const model: FunctionCompletionGateway = { complete: async () => ({ ok: true, value: { role: 'assistant', content: JSON.stringify({ narrative: '너는 렌즈를 만진다.  \n', statChanges: {}, addItems: [], removeItems: [], repaired: ['lens'] }) } }) };
-    const result = await createGameMaster(model).turn(createSession(), 'x'.repeat(200), e => events.push(e));
-    assert.equal(result.ok, true);
-    if (result.ok) assert.ok(result.value.journal.some(line => line.includes('repair:not-lantern-room')));
-    assert.ok(events.filter(e => e.kind === 'narrative').every(e => e.kind !== 'narrative' || !!e.text.trim()));
-  });
-
-  it('When starting Then sends no tools; sleep journals the action time and history trimming owns the limit', async () => {
-    let calls = 0;
-    const gm = createGameMaster({ complete: async (_messages, tools) => {
-      if (calls++ === 0) assert.deepEqual(tools, []);
-      return { ok: true, value: { role: 'assistant', content: JSON.stringify({ narrative: '너는 잠든다.', sleep: true }) } };
-    } });
-    assert.equal((await gm.start()).ok, true);
-    const session = createSession(); session.state.day = 2; session.state.time = 'night';
-    session.recent = Array.from({ length: 4 }, (_, i) => ({ action: '행동' + i, narrative: '서술' + i }));
-    const result = await gm.turn(session, '잔다');
-    assert.equal(result.ok, true);
-    if (result.ok) { assert.match(result.value.journal.at(-1)!, /^2일 night/); assert.equal(result.value.recent.length, 4); assert.equal(result.value.recent[0]!.action, '행동1'); }
-  });
-
 });
 
 describe('Given adventure server budgets and canonical sessions', () => {
@@ -91,10 +70,14 @@ describe('Given adventure server budgets and canonical sessions', () => {
     await gm.turn(createSession(), '탐색', e => { if (e.kind === 'dice') dice++; });
     assert.equal(dice, 6); assert.ok(messagesMax < 20);
   });
-  it('When the total deadline expires Then fails without waiting for an unresponsive model', async () => {
+  it('When the total deadline expires Then fails without waiting for an unresponsive model', async t => {
+    const deadline = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => { assert.equal(ms, 90_000); return deadline.signal; });
     let observed: AbortSignal | undefined;
-    const gm = createGameMaster({ complete: async (_messages, _tools, options) => { observed = options?.signal; return await new Promise(() => {}); } }, { deadlineMs: 20 });
-    const result = await Promise.race([gm.turn(createSession(), '대기'), new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('deadline missed')), 500))]);
+    const gm = createGameMaster({ complete: async (_messages, _tools, options) => { observed = options?.signal; return await new Promise(() => {}); } });
+    const pending = gm.turn(createSession(), '대기');
+    deadline.abort();
+    const result = await Promise.race([pending, new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('deadline missed')), 500))]);
     assert.equal(result.ok, false); assert.equal(observed?.aborted, true);
   });
   it('When counters are at the boundary Then refuses further calls and generated boundary states validate', async () => {

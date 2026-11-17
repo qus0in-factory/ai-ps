@@ -11,7 +11,6 @@ export interface Stats { health: number; warmth: number; focus: number }   // 0.
 export interface GameState {
   day: number;                      // 1..
   time: TimeOfDay;
-  timeActions?: number;              // 유효 행동 누적 0..2, 과거 세션은 0으로 처리
   weather: Weather;
   location: LocationId;
   stats: Stats;
@@ -25,17 +24,17 @@ export interface TurnOutcome {
   narrative: string;                                   // 1..1200자
   statChanges: Partial<Stats>;                         // 각 −40..+40 정수. 기본 소모는 포함하지 않음
   addItems: string[]; removeItems: string[];           // 각 ≤ 4개
-  location?: LocationId; time?: TimeOfDay; weather?: Weather;
+  day?: number; location?: LocationId; time?: TimeOfDay; weather?: Weather;
   repaired?: RepairPart[];                             // 코드가 부품 아이템·장소·집중 조건으로 재검증
-  sleep?: boolean;                                     // quarters에서만 유효
+  sleep?: boolean;                                     // 수면 회복 요청
   lampLit?: boolean;                                   // 클리어 요청. 코드가 재검증
 }
 
-/** applyTurn이 실제로 적용한 것. 일지와 화면 표시에 쓴다. */
+/** applyTurn이 실제로 적용한 것. 화면 표시에 쓴다. */
 export interface AppliedChanges {
   stats: Stats;                      // 최종 delta(기본 소모 + 패널티 + 모델 변화량, 클램프 반영)
   added: string[]; removed: string[];
-  repaired: RepairPart[]; rejected: string[];   // 거부 사유 코드: 'repair:no-part' | 'repair:not-lantern-room' | 'repair:no-focus' | 'sleep:not-quarters' | 'lamp:not-ready' | 'lamp:too-late'
+  repaired: RepairPart[];   // 적용된 수리만 포함
   slept: boolean; moved?: LocationId;
 }
 
@@ -43,7 +42,6 @@ export interface TurnRecord { action: string; narrative: string }  // narrative�
 export interface AdventureSession {
   version: 1;
   state: GameState;
-  journal: string[];                 // 코드가 만든 요약, ≤ 12줄 × 80자
   recent: TurnRecord[];              // 최근 ≤ 4턴
   turn: number;                      // 누적 턴 수
 }
@@ -51,7 +49,7 @@ export interface AdventureSession {
 export type AdventureEvent =
   | { kind: 'accepted'; action: string }
   | { kind: 'dice'; sides: number; difficulty: number; roll: number; success: boolean }
-  | { kind: 'narrative'; index: number; text: string; final: boolean }   // 문장 단위 조각
+  | { kind: 'narrative'; text: string }   // 턴당 서술 한 번
   | { kind: 'state'; state: GameState; applied: AppliedChanges }
   | { kind: 'invalid'; reason: string }                                  // 무효 턴: 상태 불변
   | { kind: 'ending'; ending: Ending; day: number };

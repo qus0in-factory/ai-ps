@@ -27,52 +27,45 @@ export function AdventureWidget(props: { client: AdventureClient; store: Adventu
   const shown = () => preview() ?? session()?.state;
   const finished = () => Boolean(ending() ?? shown()?.ending);
 
-  // TanStack Query 는 pending/error/취소 생명주기만 맡는다. 서술 조각은 onEvent 로 zustand 에 흘러간다.
+  // TanStack Query 는 pending/error/취소 생명주기만 맡는다. 서술은 onEvent 로 zustand 에 흘러간다.
+  // 진행 중에는 입력과 새 게임을 비활성화해, 늦은 결과가 새 상태를 덮는 상황 자체를 막는다.
   let controller: AbortController | undefined;
-  // 요청 세대(request)를 함께 넘겨, 새 게임·새 턴 뒤에 늦게 도착한 결과를 무시한다.
-  const guard = (fallback: string, request: number) => (reason: unknown) =>
-    props.store.getState().fail(
-      reason instanceof Error && reason.message.trim() ? reason.message : fallback, request,
-    );
+  const guard = (fallback: string) => (reason: unknown) => props.store.getState().fail(
+    reason instanceof Error && reason.message.trim() ? reason.message : fallback,
+  );
 
-  let startRequest = 0;
   const startGame = createMutation(() => ({
     mutationFn: async () => {
       controller = new AbortController();
       props.store.getState().beginStart();
-      startRequest = props.store.getState().request;
-      const request = startRequest;
       const result = await props.client.start(
-        (event) => props.store.getState().applyEvent(event, request), controller.signal,
+        (event) => props.store.getState().applyEvent(event), controller.signal,
       );
       if (!result.ok) throw new Error(result.reason);
-      props.store.getState().commit(result.value, request);
+      props.store.getState().commit(result.value);
       return result.value;
     },
     retry: 0,
     networkMode: 'always',
-    onError: (reason: unknown) => guard('모험을 시작하지 못했습니다.', startRequest)(reason),
+    onError: guard('모험을 시작하지 못했습니다.'),
   }));
 
-  let turnRequest = 0;
   const playTurn = createMutation(() => ({
     mutationFn: async (action: string) => {
       const current = props.store.getState().session;
       if (!current) throw new Error('진행 중인 모험이 없습니다.');
       controller = new AbortController();
       props.store.getState().beginTurn();
-      turnRequest = props.store.getState().request;
-      const request = turnRequest;
       const result = await props.client.turn(
-        current, action, (event) => props.store.getState().applyEvent(event, request), controller.signal,
+        current, action, (event) => props.store.getState().applyEvent(event), controller.signal,
       );
       if (!result.ok) throw new Error(result.reason);
-      props.store.getState().commit(result.value, request);
+      props.store.getState().commit(result.value);
       return result.value;
     },
     retry: 0,
     networkMode: 'always',
-    onError: (reason: unknown) => guard('턴을 진행하지 못했습니다.', turnRequest)(reason),
+    onError: guard('턴을 진행하지 못했습니다.'),
   }));
 
   const restart = () => {
@@ -100,8 +93,8 @@ export function AdventureWidget(props: { client: AdventureClient; store: Adventu
 
       <Show when={!session()}>
         <section class="adventure-intro">
-          <p>폭풍이 등대를 껐다. 닷새 뒤 보급선이 암초 해역을 지난다.</p>
-          <p>등실의 세 부품을 맞추고, 그 전에 불을 켜라.</p>
+          <p>폭풍에 등대 불이 꺼졌습니다. 닷새째 밤, 보급선이 암초가 많은 바다를 지나갑니다.</p>
+          <p>그 전에 망가진 부품 세 가지(렌즈·태엽·등유)를 찾아 고치고, 등대에 다시 불을 밝히세요.</p>
           <button type="button" onClick={() => startGame.mutate()} disabled={busy()}>
             {busy() ? '시작 중…' : '모험 시작'}
           </button>

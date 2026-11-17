@@ -10,10 +10,10 @@ const state: GameState = {
   inventory: ['lantern-handheld', 'matches'],
   repairs: { lens: false, clockwork: false, oil: false },
 };
-const original: AdventureSession = { version: 1, state, journal: ['1일차 밤 숙소: 쉰다'], recent: [], turn: 4 };
+const original: AdventureSession = { version: 1, state, recent: [], turn: 4 };
 const applied = {
   stats: { health: -5, warmth: -12, focus: -4 },
-  added: ['spare-lens'], removed: [], repaired: [], rejected: [], slept: false,
+  added: ['spare-lens'], removed: [], repaired: [], slept: false,
 };
 
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');

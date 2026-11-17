@@ -12,17 +12,17 @@ const state: GameState = {
   inventory: ['lantern-handheld', 'matches'],
   repairs: { lens: false, clockwork: false, oil: false },
 };
-const session: AdventureSession = { version: 1, state, journal: [], recent: [], turn: 0 };
+const session: AdventureSession = { version: 1, state, recent: [], turn: 0 };
 const moved: GameState = { ...state, location: 'boathouse' };
 
 const applied = {
   stats: { health: 0, warmth: -6, focus: -4 },
-  added: [], removed: [], repaired: [], rejected: [], slept: false,
+  added: [], removed: [], repaired: [], slept: false,
 };
 
 describe('Given an adventure view waiting for a turn', () => {
   it('When the turn begins Then the phase is turn and previous stream is cleared', () => {
-    const view = beginTurn({ ...initialState(), session, streaming: { action: 'old', text: 'x', dice: [], fragments: [] } });
+    const view = beginTurn({ ...initialState(), session, streaming: { action: 'old', text: 'x', dice: [] } });
     assert.equal(view.phase, 'turn');
     assert.equal(view.error, '');
     assert.equal(view.streaming, undefined);
@@ -38,13 +38,12 @@ describe('Given an accepted action', () => {
   });
 });
 
-describe('Given a turn with dice, narrative fragments and a new state', () => {
+describe('Given a turn with dice, a narrative and a new state', () => {
   it('When the state event arrives Then only the preview changes and the session is untouched', () => {
     let view: AdventureView = beginTurn({ ...initialState(), session });
     view = reduceEvent(view, { kind: 'accepted', action: '창고를 뒤진다' });
     view = reduceEvent(view, { kind: 'dice', sides: 20, difficulty: 12, roll: 14, success: true });
-    view = reduceEvent(view, { kind: 'narrative', index: 1, text: '두 번째 문장.', final: true });
-    view = reduceEvent(view, { kind: 'narrative', index: 0, text: '첫 문장.', final: false });
+    view = reduceEvent(view, { kind: 'narrative', text: '첫 문장. 두 번째 문장.' });
     view = reduceEvent(view, { kind: 'state', state: moved, applied });
 
     assert.equal(view.session, session, '낙관적 갱신 금지: 세션은 result 에서만 교체한다');
@@ -112,7 +111,7 @@ describe('Given a turn that ends the game', () => {
 
 describe('Given a finished request', () => {
   it('When the session is committed Then it replaces the view and clears the stream', () => {
-    const view = commit({ ...initialState(), error: 'x', streaming: { action: 'a', text: 'b', dice: [], fragments: [] } }, session);
+    const view = commit({ ...initialState(), error: 'x', streaming: { action: 'a', text: 'b', dice: [] } }, session);
     assert.equal(view.session, session);
     assert.equal(view.error, '');
     assert.equal(view.streaming, undefined);
@@ -137,7 +136,7 @@ describe('Given a starting and reset flow', () => {
   });
   it('When the first scene arrives without a state event Then commit keeps it as an intro entry', () => {
     const streaming = reduceEvent({ ...initialState(), phase: 'starting' },
-      { kind: 'narrative', index: 0, text: '폭풍이 몰아친다.', final: true });
+      { kind: 'narrative', text: '폭풍이 몰아친다.' });
     const view = commit(streaming, session);
     assert.equal(view.log.length, 1);
     assert.equal(view.log[0]!.action, '');
@@ -149,25 +148,11 @@ describe('Given a starting and reset flow', () => {
   });
 });
 
-describe('Given a newer request generation', () => {
-  it('When beginTurn bumps the request id Then stale events and results are ignored', () => {
-    const started = beginTurn({ ...initialState(), session });
-    const stale = started.request - 1;
-    assert.equal(reduceEvent(started, { kind: 'accepted', action: '늦은 이벤트' }, stale).log.length, 0);
-    assert.equal(reduceEvent(started, { kind: 'narrative', index: 0, text: '늦은 서술', final: true }, stale).streaming, undefined);
-    assert.equal(commit(started, { ...session, turn: 9 }, stale).session, session);
-    assert.equal(fail(started, '늦은 실패', stale).error, '');
-  });
-  it('When the request generation matches Then the result is applied', () => {
-    const started = beginTurn({ ...initialState(), session });
-    const applied = commit(started, { ...session, turn: 9 }, started.request);
-    assert.equal(applied.session?.turn, 9);
-  });
-  it('When reset bumps the request id Then a late start result cannot overwrite the new game', () => {
-    const view = { ...initialState(), session, request: 7 };
-    const resetRequest = view.request + 1;
-    const late = commit({ ...initialState(), request: resetRequest }, session, 7);
-    assert.equal(late.session, null, '새 게임 뒤 늦은 결과는 무시한다');
+describe('Given a single narrative event', () => {
+  it('When it arrives Then the stream shows the whole text without fragment joining', () => {
+    const view = reduceEvent(beginTurn({ ...initialState(), session }), { kind: 'narrative', text: '폭풍이 몰아친다.' });
+    assert.equal(view.streaming?.text, '폭풍이 몰아친다.');
+    assert.equal(view.streaming?.dice.length, 0);
   });
 });
 
@@ -184,7 +169,7 @@ describe('Given a persisted session read from storage', () => {
     assert.deepEqual(restoreSession(session), session);
   });
   it('When the value is corrupted Then null is returned instead of throwing', () => {
-    assert.equal(restoreSession({ version: 1, state: {}, journal: [], recent: [], turn: 0 }), null);
+    assert.equal(restoreSession({ version: 1, state: {}, recent: [], turn: 0 }), null);
     assert.equal(restoreSession(null), null);
     assert.equal(restoreSession('nope'), null);
   });
