@@ -12,3 +12,9 @@
 .pixel-bar--health .pixel-bar__cell--on { background: #ff8a80; }
 .pixel-bar--warmth .pixel-bar__cell--on { background: #ffc266; }
 .pixel-bar--focus .pixel-bar__cell--on { background: #8ec5ff; }
+
+/* compact 상태 패널용 얇은 바 */
+.pixel-bar--compact { gap: 4px; font-size: 11px; }
+.pixel-bar--compact .pixel-bar__cell { width: 5px; height: 8px; }
+.pixel-bar--compact .pixel-bar__label { min-width: 0; }
+.pixel-bar--compact .pixel-bar__value { min-width: 18px; }

@@ -1,9 +1,23 @@
-import { For, Show } from 'solid-js';
+import { createEffect, For, Show } from 'solid-js';
 import type { AdventureLogEntry, StreamingTurn } from '../../../app/adventure/session-store.ts';
 import { deltaLine, diceLine, isIntro, streamingView } from '../../components/adventure/narrative-view.ts';
 
 export function NarrativeLog(props: { log: AdventureLogEntry[]; streaming?: StreamingTurn; restored?: boolean }) {
   const live = () => streamingView(props.streaming);
+  // 페이지 스크롤을 쓰므로, 새 서술이 오면 마지막 지점만 화면 안으로 맞춘다(내부 스크롤 없음).
+  let end: HTMLDivElement | undefined;
+  let mounted = false;
+  let lastCount = 0;
+  let lastText = '';
+  createEffect(() => {
+    const count = props.log.length;
+    const text = props.streaming?.text ?? '';
+    if (!mounted) { mounted = true; lastCount = count; lastText = text; return; }
+    if (count === lastCount && text === lastText) return;
+    lastCount = count;
+    lastText = text;
+    if (typeof end?.scrollIntoView === 'function') end.scrollIntoView({ block: 'nearest' });
+  });
   return (
     <section class="adv-log" role="log" aria-live="polite" aria-label="모험 서술">
       <Show when={props.restored && props.log.length}>
@@ -37,6 +51,7 @@ export function NarrativeLog(props: { log: AdventureLogEntry[]; streaming?: Stre
           <p class="adv-log__text">{live().text}<span class="adv-caret" aria-hidden="true">▌</span></p>
         </article>
       </Show>
+      <div ref={end} class="adv-log__end" aria-hidden="true" />
     </section>
   );
 }

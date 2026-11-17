@@ -22,3 +22,13 @@ describe('Given the shared adventure narration prompt', () => {
     assert.match(SYSTEM_PROMPT, /표에 없는.*한국어/);
   });
 });
+
+describe('Given approachable adventure actions', () => {
+  it('When describing everyday actions Then avoids dice and supplies moderate thresholds only for real danger', () => {
+    assert.match(SYSTEM_PROMPT, /정말 위험한 행동.*roll_dice/);
+    assert.match(SYSTEM_PROMPT, /탐색·이동·물건 줍기.*불 피우기.*주사위 없이 성공/);
+    assert.match(SYSTEM_PROMPT, /부품이 있는 장소.*탐색하면.*찾는다/);
+    assert.match(SYSTEM_PROMPT, /보통 8.*65%.*어려움 12.*45%/);
+    assert.ok(!SYSTEM_PROMPT.includes('d20에서 15 이상'));
+  });
+});
