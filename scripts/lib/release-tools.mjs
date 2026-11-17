@@ -1,5 +1,26 @@
 import { parseEnv, stripVTControlCharacters } from 'node:util';
 
+export function mergeSmokePaths(features) {
+  if (!Array.isArray(features)) throw new Error('invalid feature list');
+  const paths = features.map(feature => {
+    const path = feature?.route;
+    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || /[\\?#\s\u0000-\u001f\u007f]/u.test(path)) throw new Error('invalid feature path');
+    return path;
+  });
+  return [...new Set(['/', '/chat', ...paths])];
+}
+
+export function trackedPublicAssets(output) {
+  const files = [...new Set(output.split('\0').filter(Boolean))];
+  if (files.some(path => !path.startsWith('public/') || !path.slice(7) || path.split('/').some(part => part === '..' || part === '.'))) throw new Error('invalid asset path');
+  return { files };
+}
+
+export function assetVerdict(status, local, remote) {
+  if (status !== 200) return 'HTTP';
+  return Buffer.from(local).equals(Buffer.from(remote)) ? 'PASS' : 'MISMATCH';
+}
+
 export const APP_KEYS = ['OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_TOOL_MODE', 'OWM_API_KEY', 'OPENAI_BASE_URL', 'LOG_LEVEL'];
 
 export function filterAppSecrets(text) {

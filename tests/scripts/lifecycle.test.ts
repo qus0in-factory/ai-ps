@@ -30,10 +30,11 @@ describe('Given the default fast deployment checks', () => {
         }, table: values => { rows = values; },
       }), true);
       assert.deepEqual(calls, [
-        { path: '/', method: 'GET' }, { path: '/queens', method: 'GET' }, { path: '/chat', method: 'GET' },
+        { path: '/', method: 'GET' }, { path: '/chat', method: 'GET' },
+        { path: '/adventure', method: 'GET' }, { path: '/queens', method: 'GET' }, { path: '/talk', method: 'GET' },
         ...(llm ? [{ path: '/api/chat', method: 'POST' }] : []),
       ]);
-      assert.equal(rows.length, llm ? 4 : 3);
+      assert.equal(rows.length, llm ? 6 : 5);
     });
   }
   it('When an explicitly requested LLM check fails Then smoke fails without printing response text', async () => {
@@ -56,7 +57,9 @@ describe('Given the default fast deployment checks', () => {
         return step === 'deploy' ? deployment : '';
       } });
       assert.deepEqual(calls.map(call => call.step), ['deploy', 'smoke']);
-      assert.ok(!calls.find(call => call.step === 'smoke')!.args.includes('--llm'));
+      const smokeArgs = calls.find(call => call.step === 'smoke')!.args;
+      assert.ok(!smokeArgs.includes('--llm'));
+      assert.ok(smokeArgs.includes('--assets'));
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
   it('When build is skipped without existing assets Then fails before any remote commands', async () => {
@@ -144,6 +147,7 @@ describe('Given deployment orchestration with fake credentials and commands', ()
     const execute = (step: string) => { calls.push(step); return step === 'deploy' ? deployment : ''; };
     await deploy(['--dry-run'], { execute, print: () => {} });
     assert.deepEqual(calls, []);
+    calls.length = 0;
     await deploy(['--skip-secrets'], { execute, print: () => {} });
     assert.deepEqual(calls, ['build', 'deploy', 'smoke']);
   });

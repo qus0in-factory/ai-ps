@@ -45,7 +45,7 @@ pnpm test && pnpm typecheck && pnpm build
 
 ## 배포
 
-Cloudflare Workers 배포는 총괄만 수행합니다. `pnpm run deploy`로 배포하고, secret은 `wrangler secret bulk`로 올립니다. 공급자 교체는 [docs/providers.md](docs/providers.md)를, 자세한 절차는 [운영 절차](docs/harness/operations.md)를 참고하세요.
+Cloudflare Workers 배포는 총괄만 수행합니다. `pnpm run deploy`가 빌드·secret 동기화·배포·스모크를 이어 합니다. 공급자 교체는 [docs/providers.md](docs/providers.md)를, 자세한 절차는 [운영 절차](docs/harness/operations.md)를 참고하세요.
 
 ## 라이선스
 
