@@ -3,11 +3,11 @@
     "keyEnv": "OPENAI_API_KEY",
     "baseUrlEnv": "OPENAI_IMAGE_BASE_URL",
     "defaultBaseUrl": "https://api.openai.com/v1",
-    "size": "1024x1024",
+    "size": "1536x1024",
     "model": "gpt-image-2.6-flare"
   },
-  "promptPrefix": "8-bit pixel art sprite sheet, strict 16-color palette, hard pixel edges, no anti-aliasing, no gradients, no text, no watermark, plain solid #FF00FF background, 3 columns by 2 rows grid of six equal panels, generous magenta gutters between panels, each panel centered subject filling 80%, same character and outfit in every panel, same lighting and outline thickness.",
-  "paletteColors": "#F7F1E3,#E8DCC8,#C9B79C,#8B5A2B,#5C3A1E,#1F1B16,#3A2F25,#5C4A3A,#F5D6B3,#E8B88A,#C98A5E,#A7C7E7,#2E4A6B,#7FAF8A,#000000,#FFFFFF",
+  "promptPrefix": "Redesign the reference as genuinely low-resolution pixel art, not a pixelated illustration. A 3 columns by 2 rows sprite sheet, six equal square cells, 1536x1024 canvas. Each sprite is authored on a strict 64x64 pixel grid per cell, enlarged exactly 8x using nearest neighbor. Every edge follows that one pixel grid. Large chunky coherent pixel clusters, flat color fills, consistent 1px dark warm outline at native resolution, simple two-tone shading only. Maximum 16 deliberate colors from warm cream, peach skin, dark brown hair and muted blue. NO texture, NO knit pattern, NO individual hair strands, NO dithering, NO noise, NO antialiasing, NO gradients, NO tiny scattered highlights. Solid pure #FF00FF background and generous empty gutters in every cell. Identical head size, alignment, torso pose, costume and silhouette in all six cells. Expressions change ONLY eyes, eyebrows and mouth. Hands stay out of frame in every cell. NO effect lines, NO punctuation, NO question marks, NO sparkles, NO sweat drops, NO floating marks, NO text. Show the full clean bust silhouette inside the cell: rounded shoulders with a gently rounded/tapered chest-level lower edge, never a rectangular crop or a straight chopped baseline. Leave 6 native pixels of magenta margin on all four sides. Keep the two original adult tutors recognizable and friendly, not a detailed anime painting. CRITICAL FRAMING CORRECTION: each entire bust must fit inside native x=8..55 and y=8..55 of its 64x64 cell. This is a small complete isolated icon, NOT a portrait filling the panel. Keep at least 8 full native magenta pixels BELOW the bust as well as above and on both sides. Finish the lower chest with a shallow U-shaped curved dark outline connecting the rounded shoulders; the bottom edge must be fully drawn, not cut by a panel boundary. No straight rectangular body bottom. Use large single-color hair masses, with only one contiguous highlight patch per lock; eliminate interior dotted hair edges. In every cell retain exactly the same torso pixels. Confused must clearly differ from neutral through uneven raised inner eyebrows and a small visibly skewed 3-pixel mouth; think looks sideways with pursed lips. Background must be perfectly flat #FF00FF, no glow or shadows.",
+  "paletteColors": "#F7F1E3,#E8DCC8,#C9B79C,#8B5A2B,#5C3A1E,#1F1B16,#3A2F25,#5C4A3A,#F5D6B3,#E8B88A,#C98A5E,#A7C7E7,#2E4A6B,#7FAF8A,#000000,#FFFFFF,#E7A199,#9A9B98",
   "assets": [
     {
       "name": "tutor-f-sheet",
@@ -15,7 +15,7 @@
       "sheet": true,
       "grid": "3x2",
       "final": 1024,
-      "subject": "friendly Japanese language tutor, young adult woman in her late 20s, shoulder-length dark hair, light cardigan over a white blouse, gentle eyes. Six upper-body portrait expressions in fixed order: top row left-to-right neutral (calm friendly), smile (praising), think (listening, hand on chin); bottom row left-to-right surprised (wide eyes), encourage (bright wink smile), confused (puzzled). Same person, same outfit, same framing in every panel. No text labels.",
+      "subject": "Reference identity: same young adult woman, shoulder-length dark brown softly bobbed hair with a side part, fair warm skin, cream/light beige cardigan over an ivory white collared blouse. Simplify hair into three broad solid locks and cardigan into two flat light beige panels; no jewelry or decorative stitching. Six expressions, fixed order: top row neutral (relaxed eyes and small straight mouth), smile (gently closed smiling eyes and upturned mouth), think (eyes glance to the side, one slightly raised eyebrow, small closed mouth); bottom row surprised (wide open eyes, raised brows, small round mouth), encourage (one eye winking and confident smile), confused (uneven inward brows, puzzled eyes, small asymmetric mouth). All differences confined to facial features; same body and hands-out-of-frame pose.",
       "slices": [
         { "name": "tutor-f-neutral", "cell": 0, "final": 64, "purpose": "기본" },
         { "name": "tutor-f-smile", "cell": 1, "final": 64, "purpose": "칭찬" },
@@ -31,7 +31,7 @@
       "sheet": true,
       "grid": "3x2",
       "final": 1024,
-      "subject": "friendly Japanese language tutor, young adult man in his late 20s, short dark hair, button-up shirt with a light cardigan, gentle eyes. Six upper-body portrait expressions in fixed order: top row left-to-right neutral (calm friendly), smile (praising), think (listening, hand on chin); bottom row left-to-right surprised (wide eyes), encourage (bright wink smile), confused (puzzled). Same person, same outfit, same framing in every panel. No text labels.",
+      "subject": "Reference identity: same young adult man, short dark brown side-swept hair, fair warm skin, cream/light beige cardigan over a muted light blue collared button shirt. Simplify hair into three broad solid tufts and cardigan into two flat light beige panels; shirt placket is one clean line, no knit texture. Six expressions, fixed order: top row neutral (relaxed eyes and small straight mouth), smile (gently closed smiling eyes and upturned mouth), think (eyes glance to the side, one slightly raised eyebrow, small closed mouth); bottom row surprised (wide open eyes, raised brows, small round mouth), encourage (one eye winking and confident smile), confused (uneven inward brows, puzzled eyes, small asymmetric mouth). All differences confined to facial features; same body and hands-out-of-frame pose.",
       "slices": [
         { "name": "tutor-m-neutral", "cell": 0, "final": 64, "purpose": "기본" },
         { "name": "tutor-m-smile", "cell": 1, "final": 64, "purpose": "칭찬" },

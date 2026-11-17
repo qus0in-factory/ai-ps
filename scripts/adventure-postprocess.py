@@ -5,7 +5,7 @@
 stdlib + Pillow 만 사용하며 `python3 -I scripts/adventure-postprocess.py ...` 로 실행한다.
 """
 import argparse
-from collections import deque
+from collections import Counter, deque
 import os
 import sys
 
@@ -26,8 +26,8 @@ def parse_palette_colors(spec):
     if not spec:
         return PALETTE
     colors = [item.strip() for item in spec.split(',') if item.strip()]
-    if len(colors) != 16:
-        raise ValueError(f"palette must have 16 colors, got {len(colors)}")
+    if not 16 <= len(colors) <= 24:
+        raise ValueError(f"palette must have 16..24 colors, got {len(colors)}")
     return colors
 
 
@@ -38,7 +38,7 @@ def rgb(value):
 
 def palette_image(path, colors=None):
     colors = colors or PALETTE
-    image = Image.new("P", (16, 1))
+    image = Image.new("P", (len(colors), 1))
     flat = [channel for color in colors for channel in rgb(color)]
     image.putpalette(flat)
     if path:
@@ -113,7 +113,75 @@ def corner_background_mask(image, tolerance, scale=4):
     return mask.resize((width, height), Image.Resampling.NEAREST)
 
 
+def reduce_by_mode(source, grid):
+    """Choose a block's dominant color before palette remapping, never average edges.
+
+    Bucket near-identical RGB values at 4-bit precision for counting only, so tiny
+    generated-image variations cannot outvote a broad flat fill. The chosen color
+    is still an actual source pixel from the winning bucket.
+    """
+    output = Image.new("RGBA", (grid, grid))
+    pixels = source.load()
+    for y in range(grid):
+        top, bottom = y * source.height // grid, (y + 1) * source.height // grid
+        for x in range(grid):
+            left, right = x * source.width // grid, (x + 1) * source.width // grid
+            block = [pixels[sx, sy] for sy in range(top, max(top + 1, bottom))
+                     for sx in range(left, max(left + 1, right))]
+            buckets = {}
+            for pixel in block:
+                key = tuple(c // 16 for c in pixel[:3]) if pixel[3] >= 128 else None
+                buckets.setdefault(key, []).append(pixel)
+            winner = max(buckets, key=lambda key: len(buckets[key]))
+            output.putpixel((x, y), (0, 0, 0, 0) if winner is None else
+                            (*Counter(p[:3] for p in buckets[winner]).most_common(1)[0][0], 255))
+    return output
+
+
+def clean_isolated_pixels(source):
+    """Remove detached dots and low-contrast singleton speckles in uniform fills.
+
+    Keep high-contrast single-pixel eyes/highlights and outline corners intact.
+    Work from the original grid so cleaning never cascades through a feature.
+    """
+    output = source.copy()
+    for y in range(1, source.height - 1):
+        for x in range(1, source.width - 1):
+            center = source.getpixel((x, y))
+            if not center[3]:
+                continue
+            neighbors = [source.getpixel((x + dx, y + dy))
+                         for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dx or dy]
+            if center in neighbors:
+                continue
+            if all(not p[3] for p in neighbors):
+                output.putpixel((x, y), (0, 0, 0, 0))
+                continue
+            replacement, count = Counter(neighbors).most_common(1)[0]
+            deltas = [center[i] - replacement[i] for i in range(3)]
+            if count >= 6 and replacement[3] == center[3] and \
+                    max(deltas) - min(deltas) <= 24 and sum(d * d for d in deltas) <= 96 ** 2:
+                output.putpixel((x, y), replacement)
+    return output
+
+
+def process_pixel_grid(source, args, palette):
+    alpha, keyed = key_magenta(source, args.tolerance)
+    alpha = ImageChops.darker(alpha, source.getchannel("A"))
+    keyed_source = source.copy()
+    keyed_source.putalpha(alpha)
+    reduced = reduce_by_mode(keyed_source, args.pixel_grid)
+    mapped = reduced.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
+    mapped.putalpha(reduced.getchannel("A"))
+    if args.clean_isolated:
+        mapped = clean_isolated_pixels(mapped)
+    result = mapped.resize((args.size, args.size), Image.Resampling.NEAREST)
+    return result, f"keyed={'yes' if keyed else 'no'} grid={args.pixel_grid} reduction=MODE palette={len(parse_palette_colors(args.palette_colors))} dither=none clean-isolated={args.clean_isolated}"
+
+
 def process_image(source, args, palette):
+    if args.pixel_grid:
+        return process_pixel_grid(source, args, palette)
     if args.opaque:
         mapped = source.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
         mapped.putalpha(Image.new("L", source.size, 255))
@@ -147,7 +215,7 @@ def main(argv=None):
     parser.add_argument("output")
     parser.add_argument("size", type=int, choices=(16, 32, 48, 64, 96, 180, 192, 512))
     parser.add_argument("--palette", default=None, help="palette.png 경로(주면 갱신한다)")
-    parser.add_argument("--palette-colors", default=None, help="쉼표로 구분한 16개 hex 색(팔레트 지정)")
+    parser.add_argument("--palette-colors", default=None, help="쉼표로 구분한 16~24개 hex 색(기본 16색)")
     parser.add_argument("--tolerance", type=int, default=48)
     parser.add_argument("--flood-fill", action="store_true", help="모서리 4곳에서 연결된 배경 제거")
     parser.add_argument("--flood-tolerance", type=int, default=30)
@@ -155,7 +223,14 @@ def main(argv=None):
     parser.add_argument("--opaque", action="store_true", help="배경을 투명하게 키잉하지 않고 불투명하게 유지(파비콘용)")
     parser.add_argument("--grid", default=None, help="COLSxROWS (예: 3x2). source를 격자로 잘라 처리")
     parser.add_argument("--cell", type=int, default=None, help="--grid 사용 시 처리할 셀 인덱스(0부터)")
+    parser.add_argument("--pixel-grid", type=int, choices=(32, 48, 64), default=None,
+                        help="opt-in: mode-reduce to this grid before palette remapping")
+    parser.add_argument("--clean-isolated", action="store_true", help="clean isolated grid speckles (requires --pixel-grid)")
     args = parser.parse_args(argv)
+    if args.clean_isolated and not args.pixel_grid:
+        parser.error("--clean-isolated requires --pixel-grid")
+    if args.pixel_grid and (args.opaque or args.palette_swap or args.flood_fill):
+        parser.error("--pixel-grid uses magenta keying; do not combine with opaque/palette-swap/flood-fill")
 
     colors = parse_palette_colors(args.palette_colors)
     source = Image.open(args.source).convert("RGBA")
