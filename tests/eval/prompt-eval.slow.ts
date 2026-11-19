@@ -61,6 +61,7 @@ describe('Given a live model and adventure actions', () => {
       const gm = createGameMaster(model());
       const started = await gm.start();
       let pass = started.ok;
+      let reason = '';
       if (started.ok) {
         const locationBefore = started.value.state.location;
         const applied: AppliedChanges[] = [];
@@ -69,15 +70,24 @@ describe('Given a live model and adventure actions', () => {
           if (event.kind === 'state') applied.push(event.applied);
           if (event.kind === 'narrative') narratives.push(event.text);
         });
-        pass = result.ok && narratives.length > 0 && narratives.every(text =>
+        const narrativeOk = result.ok && narratives.length > 0 && narratives.every(text =>
           text.includes('당신은') && !INTERNAL_IDS.test(text));
-        if (pass && entry.impossible) {
-          pass = applied.length > 0 && applied.every(change =>
-            change.added.length === 0 && change.removed.length === 0 && change.repaired.length === 0) &&
-            result.ok && result.value.state.location === locationBefore;
+        if (!narrativeOk) {
+          reason = narratives.some(text => INTERNAL_IDS.test(text)) ? 'ids' : 'narrative';
         }
+        pass = narrativeOk;
+        if (pass && entry.impossible) {
+          const appliedOk = applied.length > 0 && applied.every(change =>
+            change.added.length === 0 && change.removed.length === 0 && change.repaired.length === 0);
+          const locationOk = result.ok && result.value.state.location === locationBefore;
+          if (!appliedOk) reason = 'applied';
+          else if (!locationOk) reason = 'location';
+          pass = appliedOk && locationOk;
+        }
+      } else {
+        reason = 'narrative';
       }
-      t.diagnostic(`prompt-eval adventure ${entry.n}: ${pass ? 'pass' : 'fail'}`);
+      t.diagnostic(`prompt-eval adventure ${entry.n}: ${pass ? 'pass' : 'fail'}${pass ? '' : ` (${reason})`}`);
       assert.equal(pass, true, `adventure case ${entry.n} failed the code-only checks`);
     });
   }
