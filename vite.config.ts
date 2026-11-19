@@ -27,7 +27,7 @@ import { createResearchEndpoint } from './src/worker.ts';
 import { getPath } from 'hono/utils/url';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_', 'BRAVE_', 'BRAVE-']);
+  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_', 'BRAVE_', 'BRAVE-', 'NCP_', 'X-NCP-']);
   const logger = createLogger({ level: env.LOG_LEVEL });
   const talkLog = createTalkLogger(logger);
   const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
@@ -50,6 +50,8 @@ export default defineConfig(({ mode }) => {
   });
   const research = createResearchEndpoint({ OPENAI_MODEL: env.OPENAI_MODEL, OPENAI_API_KEY: env.OPENAI_API_KEY,
     OPENAI_BASE_URL: env.OPENAI_BASE_URL, BRAVE_SEARCH_API_KEY: env.BRAVE_SEARCH_API_KEY?.trim() || env['BRAVE-SEARCH-API-KEY'],
+    NCP_API_KEY_ID: env.NCP_API_KEY_ID?.trim() || env['X-NCP-APIGW-API-KEY-ID'],
+    NCP_API_KEY: env.NCP_API_KEY?.trim() || env['X-NCP-APIGW-API-KEY'],
   }, { log: metrics => logger.info(metrics) });
   const listener = getRequestListener(request => getPath(request) === '/api/research' ? research.fetch(request) : existingApi.fetch(request));
   const api = (req: IncomingMessage, res: ServerResponse, next: () => void) => {

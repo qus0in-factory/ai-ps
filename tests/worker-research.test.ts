@@ -7,6 +7,44 @@ const request = (body = '{"topic":"도시 공원"}', path = '/api/research', hea
 const env = () => ({ ASSETS: assets, LOG_LEVEL: 'silent', OPENAI_MODEL: 'research-model', OPENAI_API_KEY: 'private-openai', OPENAI_BASE_URL: 'https://model.example/v1', BRAVE_SEARCH_API_KEY: 'private-brave', RESEARCH_LIMIT: { limit: async () => ({ success: true }) } });
 
 describe('Given the Workers research composition', () => {
+  for (const brave of ['ok', 'failed', 'missing'] as const) {
+    it(`When Brave is ${brave} and NCP is configured Then uses cleaned NAVER categories with duplicate URLs removed`, async t => {
+      let models = 0; let braveCalls = 0; let ncpCalls = 0;
+      t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+        const url = new URL(String(input));
+        if (url.hostname === 'model.example') {
+          models++; const body = JSON.parse(String(init?.body));
+          if (models === 1) return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'search', type: 'function', function: { name: 'search_web', arguments: '{"query":"parks","max_results":5}' } }] } }] });
+          if (models === 2) {
+            const toolText = body.messages.at(-1).content;
+            assert.match(toolText, /NAVER News/); assert.match(toolText, /NAVER Blog/); assert.match(toolText, /NAVER Web/);
+            assert.doesNotMatch(toolText, /<\/?b>|private-/);
+            assert.equal((toolText.match(/https:\/\/example.com\/shared/g) ?? []).length, 1);
+            if (brave === 'ok') assert.match(toolText, /Brave result/);
+            return Response.json({ choices: [{ message: { role: 'assistant', content: 'Search notes' } }] });
+          }
+          return Response.json({ choices: [{ message: { role: 'assistant', content: '# Report' } }] });
+        }
+        if (url.hostname === 'api.search.brave.com') {
+          braveCalls++;
+          return brave === 'failed' ? new Response('private-brave-error', { status: 503 }) : Response.json({ web: { results: [
+            { title: 'Brave result', url: 'https://example.com/shared', description: 'Shared' },
+            { title: 'Brave other', url: 'https://example.com/brave', description: 'Other' },
+          ] } });
+        }
+        ncpCalls++; assert.equal(url.hostname, 'naverapihub.apigw.ntruss.com');
+        const headers = new Headers(init?.headers); assert.equal(headers.get('X-NCP-APIGW-API-KEY-ID'), 'private-ncp-id'); assert.equal(headers.get('X-NCP-APIGW-API-KEY'), 'private-ncp-key');
+        const category = url.pathname.split('/').at(-1);
+        return Response.json({ items: category === 'webkr' ? [
+          { title: 'Shared', link: 'https://example.com/shared#naver', description: 'Same source' },
+          { title: '<b>NAVER Web</b>', link: 'https://example.com/naver', description: 'Web summary' },
+        ] : [{ title: `<b>NAVER ${category === 'news' ? 'News' : 'Blog'}</b>`, link: `https://example.com/${category}`, description: '<b>Clean</b> summary' }] });
+      });
+      const response = await worker.fetch(request(), { ...env(), BRAVE_SEARCH_API_KEY: brave === 'missing' ? undefined : 'private-brave', NCP_API_KEY_ID: 'private-ncp-id', NCP_API_KEY: 'private-ncp-key' });
+      assert.equal(response.status, 200); const body = await response.json(); assert.equal(body.steps[0].ok, true);
+      assert.equal(models, 3); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : 1);
+    });
+  }
   it('When the production quota binding is missing or fails Then refuses external work with a safe error', async t => {
     let calls = 0; const keys: string[] = [];
     t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({}); });

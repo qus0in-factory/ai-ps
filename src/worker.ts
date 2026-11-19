@@ -23,6 +23,8 @@ import type { TalkRateLimitBindings } from './domain/talk/rate-limit.ts';
 import { getPath } from 'hono/utils/url';
 import { createResearchAgent } from './app/research/agent.ts';
 import { createBraveSearch } from './infra/research-brave-search.ts';
+import { createNcpSearch } from './infra/research-ncp-search.ts';
+import { createMergedResearchSearch } from './infra/research-merged-search.ts';
 import { createResearchWebReader } from './infra/research-web-reader.ts';
 import { createResearchRateLimit } from './infra/research-rate-limit.ts';
 import { createResearchApi, type ResearchRequestMetrics } from './ui/http/research-api.ts';
@@ -42,29 +44,36 @@ export interface Env extends TalkRateLimitBindings {
   LOG_LEVEL?: string;
   ADVENTURE_TEMPERATURE?: string;
   BRAVE_SEARCH_API_KEY?: string;
+  NCP_API_KEY_ID?: string;
+  NCP_API_KEY?: string;
   RESEARCH_LIMIT?: ResearchRateLimitBinding;
 }
 
 export function createResearchEndpoint(
-  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'RESEARCH_LIMIT'>,
+  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT'>,
   options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void } = {},
 ) {
   return createResearchApi({
     limit: createResearchRateLimit(env.RESEARCH_LIMIT, { required: options.requireLimitBinding }), log: options.log,
     run: async (topic, external) => {
-      if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim() || !env.BRAVE_SEARCH_API_KEY?.trim()) {
+      const hasBrave = Boolean(env.BRAVE_SEARCH_API_KEY?.trim());
+      const hasNcp = Boolean(env.NCP_API_KEY_ID?.trim() && env.NCP_API_KEY?.trim());
+      if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim() || !hasBrave && !hasNcp) {
         return { ok: false, reason: '리서치 공급자 설정이 필요합니다.' };
       }
       const signal = AbortSignal.any([external, AbortSignal.timeout(540_000)]);
       const model = createOpenAICompletion({ model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY,
         baseUrl: env.OPENAI_BASE_URL, logErrors: false, strictTools: false });
-      const brave = createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY });
+      const search = createMergedResearchSearch([
+        ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY })] : []),
+        ...(hasNcp ? [createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY })] : []),
+      ]);
       const allowedHosts = new Set<string>();
       const reader = createResearchWebReader({ allowedHosts, allowIpLiterals: false });
       return createResearchAgent({
         model: { complete: (messages, tools, settings) => model.complete(messages, tools, { ...settings, signal }) },
         search: async (query, max) => {
-          const result = await brave.search(query, max, signal);
+          const result = await search.search(query, max, signal);
           if (!result.ok) return result;
           for (const hit of result.value) allowedHosts.add(new URL(hit.url).hostname.replace(/\.$/, ''));
           return { ok: true, value: result.value.map(({ title, url, description }) => ({ title, url, summary: description })) };

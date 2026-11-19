@@ -5,6 +5,8 @@ import { parseEnv } from 'node:util';
 import { filterAppSecrets, parseDeployment, staleSecretNames } from './lib/release-tools.mjs';
 import { ROOT, STORE, command, noLocalStore, fail, cli, parseOptions } from './lib/command.mjs';
 
+const RESEARCH_SECRET_KEYS = ['BRAVE_SEARCH_API_KEY', 'NCP_API_KEY_ID', 'NCP_API_KEY'];
+
 export function mapResearchSecretNames(text) {
   const env = parseEnv(text);
   const aliases = {
@@ -20,9 +22,8 @@ export function mapResearchSecretNames(text) {
 
 export function filterDeploySecrets(text) {
   const mapped = mapResearchSecretNames(text);
-  // NCP probes returned 401; no runtime consumer exists, so never upload NCP keys.
-  const researchAllowlist = ['BRAVE_SEARCH_API_KEY'];
-  return { ...filterAppSecrets(text), ...Object.fromEntries(researchAllowlist.filter(key => mapped[key]).map(key => [key, mapped[key]])) };
+  // NAVER API HUB search was verified with HTTP 200; upload its application keys.
+  return { ...filterAppSecrets(text), ...Object.fromEntries(RESEARCH_SECRET_KEYS.filter(key => mapped[key]).map(key => [key, mapped[key]])) };
 }
 
 export async function deploy(args, { cwd = ROOT, execute = command, print = console.log } = {}) {
@@ -73,7 +74,8 @@ export async function deploy(args, { cwd = ROOT, execute = command, print = cons
       }
       if (remoteSecrets !== null) {
         const stale = staleSecretNames(remoteSecrets, secrets);
-        if (!secrets.BRAVE_SEARCH_API_KEY && JSON.parse(remoteSecrets).some(item => item.name === 'BRAVE_SEARCH_API_KEY')) stale.push('BRAVE_SEARCH_API_KEY');
+        const remote = JSON.parse(remoteSecrets);
+        stale.push(...RESEARCH_SECRET_KEYS.filter(key => !secrets[key] && remote.some(item => item.name === key)));
         if (stale.length) print(`WARN remote app secrets omitted from .env are preserved (not deleted): ${stale.join(', ')}`);
       }
       if (Object.keys(secrets).length) {
