@@ -11,9 +11,9 @@
 | 주제 | trim 후 **1~200자**. 그 외 400 |
 | 모델 호출 | Function Calling. 조사 온도 **0.2**, 보고서 온도 **0.3**, 추론 없음(책 값 유지) |
 | 루프 | 에이전트 주도(자율성 레벨 3). 도구 2종 `search_web`·`read_webpage`. `max_iterations=10` 상한 도달 시 **tools 없이** "정리" 요청으로 마무리 |
-| 검색 | **Brave Search API**. `.env` `BRAVE-SEARCH-API-KEY` → Workers secret `BRAVE_SEARCH_API_KEY`(책의 ddgs 대체) |
+| 검색 | **NAVER 웹문서·뉴스·블로그 검색(1차) + Brave(폴백/영문)**. 한국어 질의는 NAVER를 먼저 호출하고 결과가 2건 미만이면 Brave를 추가 호출해 병합한다. 한글이 없는 질의는 Brave만 호출한다. `.env` `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY` → Workers secret `NCP_API_KEY_ID`·`NCP_API_KEY`, `BRAVE-SEARCH-API-KEY` → `BRAVE_SEARCH_API_KEY` |
 | 본문 읽기 | **fetch + HTML 본문 추출**(책의 trafilatura 대체). 결과는 제목·주소·요약 정돈 텍스트, 본문 4,000자 절단 |
-| NCP | **이번 배포 미사용**. 2026-11-19 탐색에서 CLOVA Summary(text-summary)·Maps geocode가 모두 **401** → 현재 키로 사용 가능함을 확인하지 못함. Brave 검색만 사용. `.env` `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY` → secret `NCP_API_KEY_ID`·`NCP_API_KEY` **매핑만 두고 업로드하지 않는다**. 콘솔 앱·API 이용 설정 확인 후 재검토(Summary는 입력 2,000자 상한이라 4,000자 본문 분할 필요) |
+| KV 캐시 | 검색 결과 TTL 6시간(`rs/v1/<sha256>`), 페이지 본문 TTL 24시간(`rp/v1/<sha256>`). 성공·hit ≥ 1만 저장. `RESEARCH_CACHE` 바인딩 |
 | 세션 | 싱글턴, 서버 무상태(요청 1회로 조사 → 보고서까지 완결). 중간 대화 없음 |
 | 테스트 | `tests/<layer>/research/`에 테스트 먼저(BDD 서술). 가짜 fetch·가짜 CompletionGateway로 전부 오프라인 |
 | 단계 | 1 도메인 규칙·루프 → 2 API·어댑터 → 3 UI. 각 단계에서 테스트 먼저 |

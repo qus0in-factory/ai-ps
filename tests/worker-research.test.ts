@@ -14,13 +14,13 @@ describe('Given the Workers research composition', () => {
         const url = new URL(String(input));
         if (url.hostname === 'model.example') {
           models++; const body = JSON.parse(String(init?.body));
-          if (models === 1) return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'search', type: 'function', function: { name: 'search_web', arguments: '{"query":"parks","max_results":5}' } }] } }] });
+          if (models === 1) return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'search', type: 'function', function: { name: 'search_web', arguments: '{"query":"공원","max_results":5}' } }] } }] });
           if (models === 2) {
             const toolText = body.messages.at(-1).content;
             assert.match(toolText, /NAVER News/); assert.match(toolText, /NAVER Blog/); assert.match(toolText, /NAVER Web/);
             assert.doesNotMatch(toolText, /<\/?b>|private-/);
             assert.equal((toolText.match(/https:\/\/example.com\/shared/g) ?? []).length, 1);
-            if (brave === 'ok') assert.match(toolText, /Brave result/);
+            // Korean query uses NCP first; Brave is only a fallback.
             return Response.json({ choices: [{ message: { role: 'assistant', content: 'Search notes' } }] });
           }
           if (models === 3) return Response.json({ choices: [{ message: { role: 'assistant', content: '# Report' } }] });
@@ -44,7 +44,7 @@ describe('Given the Workers research composition', () => {
       });
       const response = await worker.fetch(request(), { ...env(), BRAVE_SEARCH_API_KEY: brave === 'missing' ? undefined : 'private-brave', NCP_API_KEY_ID: 'private-ncp-id', NCP_API_KEY: 'private-ncp-key' });
       assert.equal(response.status, 200); const body = await response.json(); assert.equal(body.steps[0].ok, true);
-      assert.equal(models, 4); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : brave === 'failed' ? 4 : 1);
+      assert.equal(models, 4); assert.equal(ncpCalls, 3); assert.equal(braveCalls, 0);
     });
   }
   it('When the production quota binding is missing or fails Then refuses external work with a safe error', async t => {

@@ -62,8 +62,8 @@ pnpm test && pnpm typecheck && pnpm build
 | `OPENAI_API_KEY`·`OPENAI_MODEL` | 모델 호출 | 모델이 필요한 요청이 실패합니다. Queens는 알고리즘 경로를 사용할 수 있습니다. |
 | `OPENAI_BASE_URL` | OpenAI 호환 공급자의 API 주소 | 기본 OpenAI 주소를 사용합니다. |
 | `OWM_API_KEY` | 채팅 날씨 도구 | 날씨 도구가 설정 오류를 반환합니다. |
-| `BRAVE-SEARCH-API-KEY` | 리서치의 Brave 검색 | NAVER가 설정돼 있으면 NAVER만 사용합니다. |
-| `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY` | 리서치의 NAVER 웹문서·뉴스·블로그 검색(일일 25,000회) | Brave가 설정돼 있으면 Brave만 사용합니다. |
+| `BRAVE-SEARCH-API-KEY` | 리서치의 Brave 검색(폴백) | NAVER가 설정돼 있으면 한국어 질의는 NAVER를 먼저 쓰고 결과가 2건 미만일 때만 Brave를 추가 호출합니다. 한글이 없는 질의는 Brave만 사용합니다. |
+| `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY` | 리서치의 NAVER 웹문서·뉴스·블로그 검색(일일 25,000회, 1차) | NAVER가 없으면 Brave만 사용합니다. |
 
 리서치에는 두 검색 공급자 중 하나가 필요합니다. 배포 스크립트가 로컬 검색 키 이름을 Workers의 `BRAVE_SEARCH_API_KEY`·`NCP_API_KEY_ID`·`NCP_API_KEY`로 매핑합니다.
 

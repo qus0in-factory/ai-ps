@@ -15,6 +15,10 @@ import { createToolLogger } from './infra/tool-logger.ts';
 import { createQueensLogger } from './infra/queens-logger.ts';
 import { createConsoleLogger } from './infra/console-logger.ts';
 import { createOpenAIClient, createOpenAICompletion, DEFAULT_FALLBACK_MODEL } from './infra/openai.ts';
+import type { KVNamespace } from './infra/kv-cache.ts';
+import { createKvJsonCache } from './infra/kv-cache.ts';
+import { createPrimaryFallbackSearch } from './infra/research-fallback-search.ts';
+import { createCachedSearch, createCachedReader } from './infra/research-cache.ts';
 import { createHttpClient } from './infra/http-client.ts';
 import { createUsageRecorder, type UsageDatabase, type UsageRecorder } from './infra/usage-recorder.ts';
 import { pruneUsageEvents } from './infra/usage-retention.ts';
@@ -55,6 +59,7 @@ export interface Env extends TalkRateLimitBindings {
   NCP_API_KEY?: string;
   RESEARCH_LIMIT?: ResearchRateLimitBinding;
   USAGE_DB?: UsageDatabase;
+  RESEARCH_CACHE?: KVNamespace;
 }
 
 interface WorkerContext {
@@ -62,7 +67,7 @@ interface WorkerContext {
 }
 
 export function createResearchEndpoint(
-  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_FALLBACK_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT'>,
+  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_FALLBACK_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT' | 'RESEARCH_CACHE'>,
   options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void; recorder?: UsageRecorder } = {},
 ) {
   return createResearchApi({
@@ -79,12 +84,16 @@ export function createResearchEndpoint(
       const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, fetcher: retrying('openai') });
       const model = createOpenAICompletion({ client: openai, model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL,
         logErrors: false, strictTools: false });
-      const search = createMergedResearchSearch([
-        ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY, fetcher: retrying('brave') })] : []),
-        ...(hasNcp ? [createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY, fetcher: retrying('ncp') })] : []),
-      ]);
+      const brave = hasBrave ? createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY, fetcher: retrying('brave') }) : undefined;
+      const ncp = hasNcp ? createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY, fetcher: retrying('ncp') }) : undefined;
+      const baseSearch = ncp && brave
+        ? createPrimaryFallbackSearch(ncp, brave, { minHits: 2 })
+        : (ncp ?? brave ?? createMergedResearchSearch([]));
+      const searchCache = createKvJsonCache(env.RESEARCH_CACHE, { prefix: 'rs/v1/', ttlSeconds: 6 * 60 * 60 });
+      const readerCache = createKvJsonCache(env.RESEARCH_CACHE, { prefix: 'rp/v1/', ttlSeconds: 24 * 60 * 60 });
+      const search = createCachedSearch(baseSearch, searchCache);
       const allowedHosts = new Set<string>();
-      const reader = createResearchWebReader({ allowedHosts, allowIpLiterals: false });
+      const reader = createCachedReader(createResearchWebReader({ allowedHosts, allowIpLiterals: false }), readerCache);
       return createResearchAgent({
         model: { complete: (messages, tools, settings) => model.complete(messages, tools, { ...settings, signal }) },
         search: async (query, max) => {
