@@ -30,6 +30,8 @@ import { createMergedResearchSearch } from './infra/research-merged-search.ts';
 import { createResearchWebReader } from './infra/research-web-reader.ts';
 import { createResearchRateLimit } from './infra/research-rate-limit.ts';
 import { createResearchApi, type ResearchRequestMetrics } from './ui/http/research-api.ts';
+import { createStatsApi } from './ui/http/stats-api.ts';
+import { queryUsageStats } from './infra/usage-stats.ts';
 import type { ResearchRateLimitBinding } from './domain/research/rate-limit.ts';
 
 export interface Env extends TalkRateLimitBindings {
@@ -115,6 +117,9 @@ export default {
       }).fetch(request);
       await flushUsage();
       return response;
+    }
+    if (getPath(request) === '/api/stats') {
+      return createStatsApi({ load: (days, now) => queryUsageStats(env.USAGE_DB, { days, now }) }).fetch(request);
     }
     const talkLog = createTalkLogger(logger);
     const limited = await limitTalkRequest(request, env, talkLog);
