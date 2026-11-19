@@ -16,7 +16,7 @@ describe('Given the Brave research search adapter', () => {
       assert.equal(url.searchParams.get('count'), '2');
       assert.equal(url.searchParams.get('text_decorations'), 'false');
       assert.equal(new Headers(init?.headers).get('X-Subscription-Token'), 'secret-key');
-      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.redirect, 'manual');
       assert.ok(init?.signal);
       return Response.json({ type: 'search', query: {}, web: { type: 'search', results: [
         { title: 'First', url: 'https://example.com/a', description: 'Summary', profile: {} },

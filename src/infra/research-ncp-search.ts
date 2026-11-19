@@ -40,7 +40,8 @@ export function createNcpSearch(config: { apiKeyId?: string; apiKey?: string; fe
             const url = new URL(`https://naverapihub.apigw.ntruss.com/search/v1/${category}`);
             url.searchParams.set('query', query.trim()); url.searchParams.set('display', String(count));
             url.searchParams.set('start', '1'); url.searchParams.set('format', 'json');
-            const response = await (config.fetcher ?? fetch)(url.href, { redirect: 'error', signal, headers: {
+            // Workers rejects redirect: 'error'; manual keeps credentialed redirects blocked.
+            const response = await (config.fetcher ?? fetch)(url.href, { redirect: 'manual', signal, headers: {
               Accept: 'application/json', 'X-NCP-APIGW-API-KEY-ID': config.apiKeyId!, 'X-NCP-APIGW-API-KEY': config.apiKey!,
             } });
             // Error payloads can echo credentials; never read or log them.

@@ -44,7 +44,7 @@ async function resolvePublicDns(hostname: string, signal: AbortSignal, fetcher: 
   for (const type of ['A', 'AAAA']) {
     const url = new URL('https://cloudflare-dns.com/dns-query');
     url.searchParams.set('name', hostname); url.searchParams.set('type', type);
-    const response = await fetcher(url.href, { headers: { Accept: 'application/dns-json' }, redirect: 'error', signal });
+    const response = await fetcher(url.href, { headers: { Accept: 'application/dns-json' }, redirect: 'manual', signal });
     if (!response.ok) { cancelResearchBody(response); throw new Error('DNS lookup failed'); }
     const data: unknown = JSON.parse(await readResearchBody(response, signal, 32 * 1024));
     if (!data || typeof data !== 'object' || !('Status' in data) || data.Status !== 0) throw new Error('DNS lookup failed');

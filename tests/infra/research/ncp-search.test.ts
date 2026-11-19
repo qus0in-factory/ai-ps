@@ -12,7 +12,7 @@ describe('Given the NCP NAVER API HUB search adapter', () => {
       assert.equal(url.searchParams.get('format'), 'json'); assert.equal(url.searchParams.get('start'), '1');
       const headers = new Headers(init?.headers);
       assert.equal(headers.get('X-NCP-APIGW-API-KEY-ID'), 'fake-id'); assert.equal(headers.get('X-NCP-APIGW-API-KEY'), 'fake-secret');
-      assert.equal(init?.redirect, 'error'); assert.ok(init?.signal);
+      assert.equal(init?.redirect, 'manual'); assert.ok(init?.signal);
       if (url.pathname.endsWith('/news')) return Response.json({ items: [{ title: '<b>뉴스</b>', link: 'https://news.naver.com/article/1', originallink: 'https://paper.example/story', description: '새로운 &quot;공원&quot; &#x1F333;' }] });
       if (url.pathname.endsWith('/blog')) return Response.json({ items: [{ title: '<b>도시</b>공원', link: 'https://blog.naver.com/user/1', description: '<p>블로그</p><script>hidden</script> &lt;b&gt;요약&lt;/b&gt;' }] });
       // Real response fields observed in the single live probe, with synthetic text.

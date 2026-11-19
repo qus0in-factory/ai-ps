@@ -17,7 +17,8 @@ export function createBraveSearch(config: { apiKey?: string; fetcher?: typeof fe
           url.searchParams.set('text_decorations', 'false');
           const response = await (config.fetcher ?? fetch)(url.href, {
             headers: { Accept: 'application/json', 'X-Subscription-Token': config.apiKey! },
-            redirect: 'error', signal,
+            // Workers supports follow/manual; reject 3xx below without forwarding keys.
+            redirect: 'manual', signal,
           });
           // Provider diagnostics may contain secrets; do not consume or expose error bodies.
           if (!response.ok) {
