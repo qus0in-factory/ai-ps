@@ -14,7 +14,7 @@ import { createTools } from './infra/tools.ts';
 import { createToolLogger } from './infra/tool-logger.ts';
 import { createQueensLogger } from './infra/queens-logger.ts';
 import { createConsoleLogger } from './infra/console-logger.ts';
-import { createOpenAIClient, createOpenAICompletion } from './infra/openai.ts';
+import { createOpenAIClient, createOpenAICompletion, DEFAULT_FALLBACK_MODEL } from './infra/openai.ts';
 import { createHttpClient } from './infra/http-client.ts';
 import { createUsageRecorder, type UsageDatabase, type UsageRecorder } from './infra/usage-recorder.ts';
 import { pruneUsageEvents } from './infra/usage-retention.ts';
@@ -138,6 +138,7 @@ export default {
       client: openai, model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL,
     };
     const model = createOpenAICompletion(modelConfig);
+    const chatModel = createOpenAICompletion({ ...modelConfig, routing: { complexModel: env.OPENAI_FALLBACK_MODEL?.trim() || DEFAULT_FALLBACK_MODEL, keys: ['ai-ps:chatPlan', 'ai-ps:chatAnswer'] } });
     const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
     const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
     const speech = { client: openai,
@@ -150,7 +151,7 @@ export default {
       talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
         client: openai, model: env.OPENAI_TRANSCRIBE_MODEL,
       }), log: talkLog },
-      reply: createReply(createGateway(model, tools, createToolLogger(logger)), createHistoryCompactor(model)),
+      reply: createReply(createGateway(chatModel, tools, createToolLogger(logger)), createHistoryCompactor(model)),
       adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
     }).fetch(request);

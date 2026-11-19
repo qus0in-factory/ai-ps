@@ -15,7 +15,7 @@ import { createFunctionToolChat } from './src/app/function-tool-chat.ts';
 import { createTools } from './src/infra/tools.ts';
 import { createToolLogger } from './src/infra/tool-logger.ts';
 import { createLogger } from './src/infra/logger.ts';
-import { createOpenAICompletion } from './src/infra/openai.ts';
+import { createOpenAICompletion, DEFAULT_FALLBACK_MODEL } from './src/infra/openai.ts';
 import { createApi } from './src/ui/http/api.ts';
 import { createTutor } from './src/app/talk/tutor.ts';
 import { createOpenAITranscriber } from './src/infra/openai-transcribe.ts';
@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
     : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
   const modelConfig = { model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL };
   const model = createOpenAICompletion(modelConfig);
+  const chatModel = createOpenAICompletion({ ...modelConfig, routing: { complexModel: env.OPENAI_FALLBACK_MODEL?.trim() || DEFAULT_FALLBACK_MODEL, keys: ['ai-ps:chatPlan', 'ai-ps:chatAnswer'] } });
   const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });
   const tools = createTools({ apiKey: env.OWM_API_KEY, queens: createQueensService() });
   const speech = { apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
@@ -45,7 +46,7 @@ export default defineConfig(({ mode }) => {
     talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
     }), log: talkLog },
-    reply: createReply(createGateway(model, tools, createToolLogger(logger, { full: true })), createHistoryCompactor(model)),
+    reply: createReply(createGateway(chatModel, tools, createToolLogger(logger, { full: true })), createHistoryCompactor(model)),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
   });
