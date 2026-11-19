@@ -161,6 +161,18 @@ describe('Given a JSON-mode completion without tools', () => {
 });
 
 
+describe('Given a prompt cache key from the call-site budget', () => {
+  it('When prompt_cache_key is passed Then forwards it unchanged in the request body', async () => {
+    let body: Record<string, unknown> = {};
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+    } });
+    await model.complete([{ role: 'user', content: '안녕' }], { prompt_cache_key: 'ai-ps:chatStep' });
+    assert.equal(body.prompt_cache_key, 'ai-ps:chatStep');
+  });
+});
+
 describe('Given structured output must use strict JSON Schema', () => {
   it('When json_object is passed Then rejects the request before calling the provider', async () => {
     let called = false;

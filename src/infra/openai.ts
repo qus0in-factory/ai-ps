@@ -143,6 +143,7 @@ export function createOpenAICompletion(
       const params = {
         messages,
         ...(settings.max_completion_tokens !== undefined ? { max_completion_tokens: settings.max_completion_tokens } : {}),
+        ...(settings.prompt_cache_key !== undefined ? { prompt_cache_key: settings.prompt_cache_key } : {}),
         ...(responseFormat ? { response_format: responseFormat } : {}),
         ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
         ...(functions.length && settings.tool_choice ? { tool_choice: settings.tool_choice } : {}),

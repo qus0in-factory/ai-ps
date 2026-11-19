@@ -4,6 +4,7 @@ import { createRealtimeSpeaker, connectWorkers, REALTIME_SPEECH_PROMPT_VERSION }
 import { createGameMaster } from './app/adventure/game-master.ts';
 import { createAdventureLogger } from './infra/adventure-logger.ts';
 import { createReply } from './app/chat.ts';
+import { createHistoryCompactor } from './app/history-compactor.ts';
 import { createQueensService } from './app/queens/service.ts';
 import { createQueensGenerator } from './app/queens/generator.ts';
 import { createToolChat } from './app/tool-chat.ts';
@@ -148,7 +149,7 @@ export default {
       talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
         client: openai, model: env.OPENAI_TRANSCRIBE_MODEL,
       }), log: talkLog },
-      reply: createReply(createGateway(model, tools, createToolLogger(logger))),
+      reply: createReply(createGateway(model, tools, createToolLogger(logger)), createHistoryCompactor(model)),
       adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
     }).fetch(request);

@@ -5,6 +5,7 @@ import { defineConfig, loadEnv } from 'vite';
 import solid from 'vite-plugin-solid';
 import { getRequestListener } from '@hono/node-server';
 import { createReply } from './src/app/chat.ts';
+import { createHistoryCompactor } from './src/app/history-compactor.ts';
 import { createQueensService } from './src/app/queens/service.ts';
 import { createQueensGenerator } from './src/app/queens/generator.ts';
 import { createQueensLogger } from './src/infra/queens-logger.ts';
@@ -44,7 +45,7 @@ export default defineConfig(({ mode }) => {
     talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
     }), log: talkLog },
-    reply: createReply(createGateway(model, tools, createToolLogger(logger))),
+    reply: createReply(createGateway(model, tools, createToolLogger(logger)), createHistoryCompactor(model)),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
   });
