@@ -6,3 +6,6 @@ export const DEFAULT_MAX_RESULTS = 5;
 export const WEBPAGE_CHAR_LIMIT = 4_000;
 /** /research 주제 길이 상한. */
 export const TOPIC_MAX = 200;
+/** 평가 하네스의 조사 성실성 하한(책 10.5 check_effort). */
+export const MIN_SEARCHES = 2;
+export const MIN_READS = 2;
