@@ -15,6 +15,7 @@
     { "route": "/adventure", "image": "/adventure/lighthouse-lit.png", "weight": 3 },
     { "route": "/queens", "image": null, "weight": 2 },
     { "route": "/research", "image": null, "weight": 2 },
-    { "route": "/talk", "image": "/talk/tutor-f-smile.png", "weight": 2 }
+    { "route": "/talk", "image": "/talk/tutor-f-smile.png", "weight": 2 },
+    { "route": "/stats", "image": null, "weight": 1 }
   ]
 }

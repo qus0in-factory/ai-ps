@@ -1,5 +1,5 @@
-import { Route, Router, useNavigate } from '@solidjs/router';
-import { onMount } from 'solid-js';
+import { Route, Router, useLocation, useNavigate, type RouteSectionProps } from '@solidjs/router';
+import { createEffect, onMount } from 'solid-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import type { ChatController } from '../app/chat.ts';
 import type { QueensGenerationController } from '../app/queens/generation-store.ts';
@@ -11,6 +11,7 @@ import { AdventurePage } from './pages/AdventurePage.tsx';
 import { IndexPage } from './pages/IndexPage.tsx';
 import { TalkPage } from './pages/TalkPage.tsx';
 import { ResearchPage } from './pages/ResearchPage.tsx';
+import { applyRouteMeta } from './route-meta.ts';
 import { StatsPage } from './pages/StatsPage.tsx';
 import type { StatsClient } from './pages/stats-view.ts';
 import type { ResearchClient } from './widgets/research/types.ts';
@@ -29,6 +30,13 @@ function RedirectToQueens() {
   return null;
 }
 
+// 라우트가 바뀔 때마다 문서 제목·설명을 route-meta 표대로 맞춘다(전 라우트 공통, 한 곳).
+function RouteMeta(props: RouteSectionProps) {
+  const location = useLocation();
+  createEffect(() => applyRouteMeta(document, location.pathname));
+  return props.children;
+}
+
 export function App(props: {
   chat: ChatController;
   queens: QueensGenerationController;
@@ -43,7 +51,7 @@ export function App(props: {
 }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
+      <Router root={RouteMeta}>
         <Route path="/" component={IndexPage} />
         <Route path="/queens" component={() => <QueensPage queens={props.queens} />} />
         <Route path="/queen" component={RedirectToQueens} />
