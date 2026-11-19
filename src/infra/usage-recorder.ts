@@ -43,6 +43,7 @@ function operation(service: UsageService, url: string): UsageOp {
   const path = new URL(url).pathname;
   if (path.endsWith('/chat/completions')) return 'completion';
   if (path.endsWith('/audio/transcriptions')) return 'transcribe';
+  if (path.endsWith('/decisions')) return 'decision';
   return 'search';
 }
 
@@ -52,8 +53,22 @@ function formModel(body: BodyInit | null | undefined): string | null {
   return typeof model === 'string' && model.trim() ? model : null;
 }
 
+/** Decisions 응답에 model이 없으면 요청 JSON의 model을 쓴다. */
+function jsonModel(body: BodyInit | null | undefined): string | null {
+  if (typeof body !== 'string') return null;
+  try {
+    const data: unknown = JSON.parse(body);
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const model = (data as { model?: unknown }).model;
+      return typeof model === 'string' && model.trim() ? model : null;
+    }
+  } catch { /* 비JSON 본문에는 모델이 없다. */ }
+  return null;
+}
+
 async function responseUsage(response: Response, op: UsageOp, requestBody: BodyInit | null | undefined) {
-  const usage = { model: op === 'transcribe' ? formModel(requestBody) : null, inputTokens: null as number | null, outputTokens: null as number | null, cachedTokens: null as number | null };
+  const usage = { model: op === 'transcribe' ? formModel(requestBody) : op === 'decision' ? jsonModel(requestBody) : null,
+    inputTokens: null as number | null, outputTokens: null as number | null, cachedTokens: null as number | null };
   if (!response.ok) return usage;
   try {
     const body: unknown = await response.clone().json();
@@ -62,10 +77,11 @@ async function responseUsage(response: Response, op: UsageOp, requestBody: BodyI
     if (typeof data.model === 'string' && data.model.trim()) usage.model = data.model;
     if (data.usage && typeof data.usage === 'object' && !Array.isArray(data.usage)) {
       const tokens = data.usage as {
-        prompt_tokens?: unknown; completion_tokens?: unknown;
+        prompt_tokens?: unknown; input_tokens?: unknown; completion_tokens?: unknown;
         prompt_tokens_details?: unknown; input_tokens_details?: unknown;
       };
       if (typeof tokens.prompt_tokens === 'number' && Number.isFinite(tokens.prompt_tokens)) usage.inputTokens = tokens.prompt_tokens;
+      if (usage.inputTokens === null && typeof tokens.input_tokens === 'number' && Number.isFinite(tokens.input_tokens)) usage.inputTokens = tokens.input_tokens;
       if (typeof tokens.completion_tokens === 'number' && Number.isFinite(tokens.completion_tokens)) usage.outputTokens = tokens.completion_tokens;
       // 캐시 적중 토큰(§16): completion은 prompt_tokens_details, 그 외는 input_tokens_details에 온다.
       for (const details of [tokens.prompt_tokens_details, tokens.input_tokens_details]) {

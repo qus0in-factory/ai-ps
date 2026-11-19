@@ -107,6 +107,23 @@ describe('Given a usage recorder inside the retrying fetch', () => {
     assert.equal(rows[0]!.values[4], null);
   });
 
+  it('When a decisions classification succeeds Then records the request model, input tokens and luna cost', async t => {
+    const { db, rows } = fakeDb();
+    const recorder = createUsageRecorder({ db, route: '/api/chat', now: () => 7_000 });
+    t.mock.method(globalThis, 'fetch', async () => Response.json({
+      answers: [{ type: 'choice', choice: 'terra', confidence: 0.9 }],
+      usage: { input_tokens: 1_000 },
+    }));
+    const response = await recorder.wrap('openai')('https://api.openai.com/v1/decisions', {
+      method: 'POST', body: JSON.stringify({ model: 'gpt-6-luna', input: '서울과 부산 기온 비교' }),
+    });
+    assert.equal((await response.json() as { answers: unknown[] }).answers.length, 1);
+    await recorder.flush();
+    assert.deepEqual(rows[0]!.values, [
+      7_000, '/api/chat', 'openai', 'decision', 'gpt-6-luna', 200, 0, 1_000, null, null, 0.0001,
+    ]);
+  });
+
   it('When the provider throws Then records status 0 and rethrows', async t => {
     const { db, rows } = fakeDb();
     const recorder = createUsageRecorder({ db, route: '/api/chat', now: () => 5_000 });
