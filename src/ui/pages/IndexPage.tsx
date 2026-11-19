@@ -6,6 +6,7 @@ export function IndexPage() {
     <main class="index-page">
       <h1>시작하기</h1>
       <nav aria-label="페이지 선택">
+        <A href="/stats" class="page-link"><span>사용량</span><span aria-hidden="true">→</span></A>
         <A href="/chat" class="page-link">
           <span>Chat</span>
           <span aria-hidden="true">→</span>
