@@ -1,5 +1,5 @@
 import { loadEnvFile } from 'node:process';
-import { createOpenAICompletion } from './infra/openai.ts';
+import { createOpenAIClient, createOpenAICompletion } from './infra/openai.ts';
 
 import { createToolChat } from './app/tool-chat.ts';
 import { createPlanExecuteChat } from './app/plan-execute-chat.ts';
@@ -13,11 +13,11 @@ loadEnvFile('.env');
 const logger = createLogger();
 const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
     : ['json', 'react'].includes(process.env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
+const openai = createOpenAIClient({ apiKey: process.env.OPENAI_API_KEY, baseUrl: process.env.OPENAI_BASE_URL });
 const gateway = createGateway(createOpenAICompletion({
+  client: openai,
   model: process.env.OPENAI_MODEL,
   fallbackModel: process.env.OPENAI_FALLBACK_MODEL,
-  apiKey: process.env.OPENAI_API_KEY,
-  baseUrl: process.env.OPENAI_BASE_URL,
 }), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger));
 const result = await gateway.complete([
   { role: 'user', content: process.argv.slice(2).join(' ') || '안녕하세요!' },

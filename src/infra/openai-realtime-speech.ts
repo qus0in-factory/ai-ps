@@ -1,6 +1,7 @@
 import type { Result } from '../domain/chat.ts';
 import { pcm16ToWav } from '../domain/talk/audio.ts';
 import { MAX_TTS_TEXT_LENGTH, type AudioClip, type Speaker } from '../domain/talk/speech-cache.ts';
+import { createOpenAIClient, type OpenAIClient } from './openai.ts';
 
 export const REALTIME_SPEECH_PROMPT_VERSION = 'ja-read-v1';
 const INSTRUCTIONS = '入力された日本語の文章を、そのまま読み上げてください。親切な日本語教師のように、はっきりと適度な速さで話してください。質問に答えたり、言葉を加えたり、翻訳したりしないでください。';
@@ -30,19 +31,20 @@ export const connectWorkers: RealtimeConnect = async (url, headers, signal) => {
 };
 
 export function createRealtimeSpeaker(config: {
-  apiKey?: string; baseUrl?: string; model?: string; voice?: string;
+  client?: OpenAIClient; apiKey?: string; baseUrl?: string; model?: string; voice?: string;
   connect?: RealtimeConnect; warn?: (entry: SpeechWarning) => void;
 }): Speaker {
+  const client = config.client ?? createOpenAIClient({ apiKey: config.apiKey, baseUrl: config.baseUrl });
   return {
     async speak(text, signal) {
       if (signal?.aborted) return { ok: false, reason: '음성 요청이 중단되었습니다.' };
       if (typeof text !== 'string' || !text.trim() || [...text].length > MAX_TTS_TEXT_LENGTH) {
         return { ok: false, reason: `음성 입력은 1~${MAX_TTS_TEXT_LENGTH}자여야 합니다.` };
       }
-      if (!config.apiKey?.trim()) return { ok: false, reason: '음성 생성 API 키가 설정되지 않았습니다.' };
-      const timeout = AbortSignal.timeout(30_000);
+      if (!client.apiKey?.trim()) return { ok: false, reason: '음성 생성 API 키가 설정되지 않았습니다.' };
+      const timeout = AbortSignal.timeout(client.timeouts.speech);
       const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      const baseUrl = (config.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '').replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+      const baseUrl = client.baseUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
       const url = `${baseUrl}/realtime?model=${encodeURIComponent(config.model?.trim() || 'gpt-realtime-2.1-mini')}`;
 
       return new Promise<Result<AudioClip>>(resolve => {
@@ -123,7 +125,7 @@ export function createRealtimeSpeaker(config: {
 
         combined.addEventListener('abort', onAbort, { once: true });
         if (combined.aborted) { onAbort(); return; }
-        Promise.resolve().then(() => (config.connect ?? connectWorkers)(url, { Authorization: `Bearer ${config.apiKey}` }, combined))
+        Promise.resolve().then(() => (config.connect ?? connectWorkers)(url, { Authorization: `Bearer ${client.apiKey}` }, combined))
           .then(connected => {
             if (finished) { close(connected); return; }
             socket = connected;

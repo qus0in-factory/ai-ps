@@ -1,13 +1,14 @@
 import type { Transcriber } from '../domain/talk/transcription.ts';
-import { fetchWithRetry } from './http-client.ts';
+import { createOpenAIClient, type OpenAIClient } from './openai.ts';
 
 export function createOpenAITranscriber(config: {
-  apiKey?: string; baseUrl?: string; model?: string; fetcher?: typeof fetch;
+  client?: OpenAIClient; apiKey?: string; baseUrl?: string; model?: string; fetcher?: typeof fetch;
 }): Transcriber {
+  const client = config.client ?? createOpenAIClient({ apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher });
   return {
     async transcribe(audio, signal) {
-      if (!config.apiKey?.trim()) return { ok: false, reason: '음성 인식 API 키가 설정되지 않았습니다.' };
-      const timeout = AbortSignal.timeout(30_000);
+      if (!client.apiKey?.trim()) return { ok: false, reason: '음성 인식 API 키가 설정되지 않았습니다.' };
+      const timeout = AbortSignal.timeout(client.timeouts.transcription);
       const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
       try {
         combined.throwIfAborted();
@@ -17,9 +18,8 @@ export function createOpenAITranscriber(config: {
         body.append('file', audio, `speech.${extension}`);
         body.append('model', config.model?.trim() || 'gpt-transcribe');
         body.append('language', 'ja');
-        const baseUrl = (config.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
-        const response = await (config.fetcher ?? fetchWithRetry)(`${baseUrl}/audio/transcriptions`, {
-          method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body, signal: combined,
+        const response = await client.fetcher(client.url('/audio/transcriptions'), {
+          method: 'POST', headers: { Authorization: `Bearer ${client.apiKey}` }, body, signal: combined,
         });
         // Do not read or log provider error bodies: they can contain credentials or speech.
         if (!response.ok) return { ok: false, reason: `음성 인식 요청에 실패했습니다. (HTTP ${response.status})` };

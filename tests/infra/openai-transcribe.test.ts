@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createOpenAITranscriber } from '../../src/infra/openai-transcribe.ts';
+import { createOpenAIClient } from '../../src/infra/openai.ts';
 
 const audio = () => new Blob(['fake audio'], { type: 'audio/webm;codecs=opus' });
 describe('Given the OpenAI Japanese transcriber', () => {
@@ -32,6 +33,19 @@ describe('Given the OpenAI Japanese transcriber', () => {
       return Response.json({ text: '' });
     } });
     assert.deepEqual(await transcriber.transcribe(audio()), { ok: true, value: '' });
+  });
+  it('When a shared client is supplied Then uses its base URL, key and deadline', async t => {
+    const timeout = AbortSignal.timeout;
+    const durations: number[] = [];
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => { durations.push(ms); return timeout(ms); });
+    const client = createOpenAIClient({ apiKey: 'shared-key', baseUrl: 'https://shared.test/v1/', fetcher: async (url, init) => {
+      assert.equal(url, 'https://shared.test/v1/audio/transcriptions');
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer shared-key');
+      return Response.json({ text: '共有クライアント' });
+    } });
+    const transcriber = createOpenAITranscriber({ client, model: 'shared-stt' });
+    assert.deepEqual(await transcriber.transcribe(audio()), { ok: true, value: '共有クライアント' });
+    assert.deepEqual(durations, [30_000]);
   });
   it('When providers fail Then returns only safe errors and emits no audio, transcript or diagnostic text', async t => {
     const logs: unknown[] = [];

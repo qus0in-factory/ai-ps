@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRealtimeSpeaker, type RealtimeSocket } from '../../src/infra/openai-realtime-speech.ts';
+import { createOpenAIClient } from '../../src/infra/openai.ts';
 
 class FakeSocket extends EventTarget implements RealtimeSocket {
   readyState = 1;
@@ -52,6 +53,17 @@ describe('Given a server-side Realtime Japanese speaker', () => {
     assert.match(session.instructions, /そのまま/); assert.match(session.instructions, /翻訳/);
     assert.deepEqual(socket.sent[1]!.item.content, [{ type: 'input_text', text: 'こんにちは。' }]);
     assert.equal(socket.accepts, 1); assert.equal(socket.closes, 1);
+  });
+  it('When a shared client is supplied Then uses its base URL and key without retrying the socket', async () => {
+    const socket = scripted(s => s.complete());
+    const client = createOpenAIClient({ apiKey: 'shared-key', baseUrl: 'https://shared.test/v1/' });
+    const speaker = createRealtimeSpeaker({ client, model: 'shared-realtime', connect: async (url, headers) => {
+      assert.equal(url, 'wss://shared.test/v1/realtime?model=shared-realtime');
+      assert.equal(headers.Authorization, 'Bearer shared-key');
+      return socket;
+    } });
+    assert.equal((await speaker.speak('こんにちは。')).ok, true);
+    assert.equal(socket.accepts, 1);
   });
   it('When using the default Workers connection Then upgrades with header auth and accepts the socket', async t => {
     const socket = scripted(s => s.complete());

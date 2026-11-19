@@ -4,7 +4,31 @@ import type { ToolDefinition } from '../domain/tools.ts';
 import { fetchWithRetry, isRetryableStatus } from './http-client.ts';
 
 export const DEFAULT_FALLBACK_MODEL = 'gpt-6.1-terra';
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+const OPENAI_TIMEOUTS = { completion: 60_000, transcription: 30_000, speech: 30_000 } as const;
 const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
+
+export interface OpenAIClient {
+  apiKey?: string;
+  baseUrl: string;
+  fetcher: typeof fetch;
+  timeouts: typeof OPENAI_TIMEOUTS;
+  url(path: string): string;
+}
+
+/** One place for the OpenAI base URL, key, timeouts and retrying fetch. */
+export function createOpenAIClient(config: {
+  apiKey?: string; baseUrl?: string; fetcher?: typeof fetch;
+} = {}): OpenAIClient {
+  const baseUrl = (config.baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
+  return {
+    apiKey: config.apiKey,
+    baseUrl,
+    fetcher: config.fetcher ?? fetchWithRetry,
+    timeouts: OPENAI_TIMEOUTS,
+    url: path => `${baseUrl}${path}`,
+  };
+}
 
 function isRetryableCompletionFailure(reason: string, signal?: AbortSignal): boolean {
   if (signal?.aborted || reason === '모델 API 키가 설정되지 않았습니다.' || reason === INVALID_RESPONSE_FORMAT_REASON) return false;
@@ -38,9 +62,10 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
 
 export async function completion(
   params: ProviderCompletionParams,
-  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean } = {},
+  options: { client?: OpenAIClient; apiKey?: string; baseUrl?: string; signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean } = {},
 ): Promise<Result<CompletionResponse>> {
-  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+  const client = options.client ?? createOpenAIClient({ apiKey: options.apiKey, baseUrl: options.baseUrl, fetcher: options.fetcher });
+  const apiKey = client.apiKey ?? process.env.OPENAI_API_KEY;
   let signal: AbortSignal | undefined;
   try {
     const responseFormat = params.response_format as { type?: unknown; json_schema?: { strict?: unknown } } | undefined;
@@ -51,10 +76,9 @@ export async function completion(
       return { ok: false, reason: '모델 API 키가 설정되지 않았습니다.' };
     }
 
-    const baseUrl = (options.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    const timeout = AbortSignal.timeout(options.timeoutMs ?? 60_000);
+    const timeout = AbortSignal.timeout(options.timeoutMs ?? client.timeouts.completion);
     signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-    const response = await (options.fetcher ?? fetchWithRetry)(`${baseUrl}/chat/completions`, {
+    const response = await (options.fetcher ?? client.fetcher)(client.url('/chat/completions'), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -93,8 +117,9 @@ export async function completion(
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; fallbackModel?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
+  config: { client?: OpenAIClient; model?: string; fallbackModel?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
 ): CompletionGateway & FunctionCompletionGateway {
+  const client = config.client ?? createOpenAIClient({ apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher });
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
       const tools = Array.isArray(options) ? options : [];
@@ -117,7 +142,7 @@ export function createOpenAICompletion(
         ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
       };
       const callOptions = {
-        debugErrors: config.debugErrors, logErrors: config.logErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,
+        client, debugErrors: config.debugErrors, logErrors: config.logErrors, signal: settings.signal, timeoutMs: settings.timeoutMs,
       };
       let result = await completion({ model, ...params }, callOptions);
       if (!result.ok && isRetryableCompletionFailure(result.reason, settings.signal)) {

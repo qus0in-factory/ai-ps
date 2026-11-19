@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { completion, createOpenAICompletion } from '../../src/infra/openai.ts';
+import { completion, createOpenAIClient, createOpenAICompletion } from '../../src/infra/openai.ts';
 import { createToolChat } from '../../src/app/tool-chat.ts';
 import { createTools } from '../../src/infra/tools.ts';
 import { readFileSync } from 'node:fs';
@@ -92,6 +92,16 @@ describe('Given a tool-forced chat function completion', () => {
 });
 
 describe('Given an OpenAI-compatible completion endpoint', () => {
+  it('When a shared client is supplied Then uses its base URL and API key', async () => {
+    const client = createOpenAIClient({ apiKey: 'shared-key', baseUrl: 'https://shared.test/v1/', fetcher: async (url, init) => {
+      assert.equal(url, 'https://shared.test/v1/chat/completions');
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer shared-key');
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '공유 클라이언트' } }] });
+    } });
+    const model = createOpenAICompletion({ client, model: 'test-model' });
+    assert.deepEqual(await model.complete([{ role: 'user', content: '안녕' }]), { ok: true, value: { role: 'assistant', content: '공유 클라이언트' } });
+  });
+
   it('When no base URL is configured Then posts to api.openai.com/v1/chat/completions by default', async () => {
     let requestedUrl: string | undefined;
     const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (url) => {
