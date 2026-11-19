@@ -75,16 +75,47 @@ describe('Given the default fast deployment checks', () => {
 });
 
 describe('Given release orchestration with a fake executor', () => {
+  it('When the requested chapter is below the highest release tag Then rejects before validation', async () => {
+    const calls: string[] = [];
+    await assert.rejects(release(['6.2.0'], { print: () => {}, execute: step => {
+      calls.push(step);
+      return '5.3.2\nv7.0.0\n2026-backup\n';
+    } }), /version:.*major 6.*latest major 7/);
+    assert.deepEqual(calls, ['version']);
+  });
+
+  it('When starting a new chapter Then requires a matching explicit chapter', async () => {
+    const execute = (step: string) => ({ version: '7.0.1\n', branch: 'main', head: 'abc123' })[step as 'version' | 'branch' | 'head'] ?? '';
+    for (const args of [['8.0.0'], ['8.0.0', '--chapter', '7']]) {
+      await assert.rejects(release(args, { print: () => {}, execute }), /version:.*requires --chapter 8/);
+    }
+    const args = ['8.0.0', '--chapter', '8', '--dry-run'];
+    const lines: string[] = [];
+    await release(args, { print: line => lines.push(line), execute });
+    assert.deepEqual(args, ['8.0.0', '--chapter', '8', '--dry-run']);
+    assert.ok(lines.includes('PLAN version major 8 (latest 7)'));
+  });
+
+  it('When a chapter flag is missing its value, repeated, or malformed Then rejects it before invoking Git', async () => {
+    for (const options of [['--chapter'], ['--chapter', '07'], ['--chapter', '7', '--chapter', '7']]) {
+      await assert.rejects(release(['7.0.2', ...options], {
+        print: () => {}, execute: () => assert.fail('invalid options must not invoke Git'),
+      }), /usage:.*--chapter/);
+    }
+  });
+
   it('When dry-running Then performs only local read commands and prints the complete plan', async () => {
     const calls: string[][] = [];
     const lines: string[] = [];
     await release(['4.3.2', '--dry-run'], { print: line => lines.push(line), execute: (_step, program, args) => {
       calls.push([program, ...args]);
+      if (args[0] === 'tag') return '4.3.1\n2026-backup\n';
       if (args[0] === 'symbolic-ref') return 'main\n';
       if (args[0] === 'rev-parse') return 'abc123\n';
       return '?? docs/retro/\0';
     } });
-    assert.ok(calls.every(([program, verb]) => program === 'git' && ['symbolic-ref', 'rev-parse', 'status'].includes(verb!)));
+    assert.ok(calls.every(([program, verb]) => program === 'git' && ['tag', 'symbolic-ref', 'rev-parse', 'status'].includes(verb!)));
+    assert.ok(lines.includes('PLAN version major 4 (latest 4)'));
     assert.ok(lines.some(line => line.includes('WARN untracked')));
     assert.ok(lines.some(line => line.includes('git push --atomic origin main 4.3.2')));
   });
@@ -93,6 +124,7 @@ describe('Given release orchestration with a fake executor', () => {
     const calls: string[] = [];
     await assert.rejects(release(['4.3.2'], { print: () => {}, execute: (step) => {
       calls.push(step);
+      if (step === 'version') return '4.3.1';
       return step === 'worktree' ? ' M package.json\0' : 'main';
     } }), /worktree:/);
     assert.ok(!calls.includes('test'));
@@ -103,6 +135,7 @@ describe('Given release orchestration with a fake executor', () => {
     const calls: string[] = [];
     await assert.rejects(release(['4.3.2'], { print: () => {}, execute: (step) => {
       calls.push(step);
+      if (step === 'version') return '4.3.1';
       if (step === 'typecheck') throw new Error('typecheck: command failed');
       return step === 'worktree' ? '' : 'main';
     } }), /typecheck:/);
@@ -159,6 +192,7 @@ describe('Given release atomicity and validation boundaries', () => {
     const calls: string[][] = [];
     await assert.rejects(release(['9.9.9'], { print: () => {}, execute: (step, _program, args) => {
       calls.push(args);
+      if (step === 'version') return '9.9.8';
       if (step === 'branch') return 'main';
       if (step === 'head') return 'abc123';
       if (step === 'push') throw new Error('push: fake failure');
@@ -172,6 +206,7 @@ describe('Given release atomicity and validation boundaries', () => {
     const calls: string[] = [];
     await assert.rejects(release(['9.9.9', '--dry-run'], { print: () => {}, execute: step => {
       calls.push(step);
+      if (step === 'version') return '9.9.8';
       return step === 'worktree' ? '?? src/untracked.ts\0' : 'main';
     } }), /worktree:/);
     assert.ok(!calls.includes('test'));
