@@ -28,7 +28,7 @@ describe('Given an AI answer in Markdown', () => {
     const html = renderMarkdown('<script>alert(1)</script>\n\n<img src="x" onerror="alert(1)">\n\n[링크](javascript:alert%281%29)', purifier);
     const document = new JSDOM(html).window.document;
     assert.equal(document.querySelector('script'), null);
-    assert.equal(document.querySelector('img')?.getAttribute('onerror'), null);
+    assert.equal(document.querySelector('img'), null);
     assert.equal(document.querySelector('a')?.getAttribute('href'), null);
   });
 });
