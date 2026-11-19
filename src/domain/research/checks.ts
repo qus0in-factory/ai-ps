@@ -5,15 +5,18 @@ import type { ResearchStep } from './types.ts';
 /** 끝 문장부호·해시·끝 슬래시 차이를 없애(agent.ts comparableUrl 규칙과 같은 방향). */
 export function normalizeCitationUrl(url: string): string {
   const trimmed = url.trim().replace(/[.,;:)\]"'*]+$/, '');
-  let normalized: string;
   try {
     const parsed = new URL(trimmed);
     parsed.hash = '';
-    normalized = parsed.href;
+    // 끝 슬래시는 경로에서만 제거한다. 쿼리 값 끝의 슬래시는 다른 URL이다.
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    return parsed.href;
   } catch {
-    normalized = trimmed;
+    const hashless = trimmed.split('#')[0]!;
+    const queryAt = hashless.indexOf('?');
+    const path = queryAt === -1 ? hashless : hashless.slice(0, queryAt);
+    return path.replace(/\/+$/, '') + (queryAt === -1 ? '' : hashless.slice(queryAt));
   }
-  return normalized.replace(/\/+$/, '');
 }
 
 export interface CitationCheck {
@@ -26,7 +29,7 @@ export function checkCitations(report: string, steps: ResearchStep[]): CitationC
   const read = new Set(steps
     .filter(step => step.tool === 'read_webpage' && step.ok && typeof step.args.url === 'string' && step.args.url.trim())
     .map(step => normalizeCitationUrl(step.args.url as string)));
-  const cited = new Set((report.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? []).map(normalizeCitationUrl));
+  const cited = new Set((report.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? []).map(normalizeCitationUrl));
   const unread = [...cited].filter(url => !read.has(url)).sort();
   return { passed: unread.length === 0, unread };
 }

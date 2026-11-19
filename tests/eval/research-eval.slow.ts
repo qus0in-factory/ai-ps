@@ -8,7 +8,7 @@ import type { ResearchAgentPorts } from '../../src/app/research/ports.ts';
 import { checkCitations, checkEffort } from '../../src/domain/research/checks.ts';
 import { buildRubricMessages, parseRubric, RUBRIC_FORMAT } from '../../src/domain/research/rubric.ts';
 import type { EvalCase } from '../../src/domain/research/regression.ts';
-import { compareEvalRuns } from '../../src/domain/research/regression.ts';
+import { compareEvalRuns, validateEvalAlignment } from '../../src/domain/research/regression.ts';
 import { budget } from '../../src/domain/token-budget.ts';
 import { createBraveSearch } from '../../src/infra/research-brave-search.ts';
 import { createNcpSearch } from '../../src/infra/research-ncp-search.ts';
@@ -128,6 +128,9 @@ describe('Given a live research eval suite', () => {
     const baselinePath = process.env.RESEARCH_EVAL_BASELINE?.trim();
     if (baselinePath) {
       const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as EvalCase[];
+      const alignment = validateEvalAlignment(baseline, candidate);
+      for (const problem of alignment) t.diagnostic(`기준선 정렬 문제: ${problem}`);
+      assert.equal(alignment.length, 0, `기준선 주제 집합·순서 불일치 ${alignment.length}건`);
       for (const comparison of compareEvalRuns(baseline, candidate)) {
         if (comparison.verdict === 'regression') t.diagnostic(`회귀 발견: ${comparison.topic}`);
         if (comparison.verdict === 'improvement') t.diagnostic(`개선: ${comparison.topic}`);

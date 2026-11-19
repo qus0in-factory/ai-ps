@@ -42,6 +42,22 @@ describe('Given code-only checks over the research trajectory', () => {
     assert.deepEqual(checkEffort(steps), { passed: true, searches: 2, reads: 2 });
   });
 
+  it('When a citation uses an uppercase scheme Then it is still checked as a URL', () => {
+    const steps: ResearchStep[] = [{ tool: 'read_webpage', args: { url: 'https://example.com/read' }, ok: true }];
+    assert.deepEqual(checkCitations('근거 HTTPS://example.org/unread', steps), {
+      passed: false, unread: ['https://example.org/unread'],
+    });
+    assert.deepEqual(checkCitations('근거 HTTPS://example.com/read', steps), { passed: true, unread: [] });
+  });
+
+  it('When a query value ends with a slash Then it is not treated as the URL without it', () => {
+    const steps: ResearchStep[] = [{ tool: 'read_webpage', args: { url: 'https://example.com/a?q=path' }, ok: true }];
+    assert.deepEqual(checkCitations('https://example.com/a?q=path/', steps), {
+      passed: false, unread: ['https://example.com/a?q=path/'],
+    });
+    assert.deepEqual(checkCitations('https://example.com/a/?q=path', steps), { passed: true, unread: [] });
+  });
+
   it('When steps are empty Then citations pass only without URLs and effort fails', () => {
     assert.deepEqual(checkCitations('근거가 없는 문장입니다.', []), { passed: true, unread: [] });
     assert.deepEqual(checkCitations('https://example.com/a', []), {
