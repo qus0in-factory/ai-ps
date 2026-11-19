@@ -31,6 +31,7 @@
 - 과거 태그는 이력으로 보존한다. 6장 회화는 `5.2.0`~`5.2.2`, 7장 리서치는 `5.3.0`~`5.3.2`로도 릴리스됐다. `5.3.2`와 `7.0.0`은 같은 커밋을 가리킨다. 기존 원격 태그 삭제 여부는 사용자 결정 사항이다.
 - `pnpm release <버전>`은 릴리스 형식의 **로컬 태그** 중 가장 높은 메이저보다 낮은 버전을 거부한다. 새 메이저에는 `--chapter <N>`을 넘기며 N은 메이저와 같아야 한다. 총괄은 태그를 만들기 전에 적용할 버전을 사용자에게 한 줄로 알리고 확인한다.
 - 기본은 빠른 경로다. `pnpm test`는 `tests/**/*.test.ts`만 실행한다. 느리거나 복잡한 검증은 `*.slow.ts`로 분리하며, `pnpm test:slow`·`pnpm smoke <url> --llm`·`bash tests/scripts/herdr/run.sh`·실모델 검증은 요청 시에만 실행한다. 기본 CI·릴리스·배포에 이 특수 검증을 추가하지 않는다.
+- 리서치의 프롬프트·모델·도구 설명을 바꾸는 패치는 `pnpm test:slow -- tests/eval/research-eval.slow.ts`를 기준선과 함께 돌려 회귀 0을 확인한 뒤 릴리스한다(절차는 docs/research/evaluator.md).
 - `pnpm release <버전>`(`scripts/release.mjs`). 작업 트리 확인 → 빠른 test·typecheck·build → 태그 중복 확인 → HEAD에 태그 → `git push --atomic origin <branch> <버전>` → `git ls-remote --tags`로 확인. 커밋은 스크립트가 하지 않고, 미추적 `docs/retro/`만 경고로 허용한다.
 - 새 라우트·기능의 OG와 README는 같은 메이저의 다음 패치까지 갱신한다. `scripts/og.json`에 항목을 추가하고 `pnpm og`로 `public/og-image.png`와 `index.html`의 OG 구간을 갱신한다. README 기능표·아키텍처 그림에도 라우트를 추가한다. `og:check`는 등록된 구성과 산출물의 불일치를 막는다. 카카오 공유 캐시를 초기화하고 Pillow는 시스템 또는 venv에 설치한다. [카카오 공유 캐시 도구](https://developers.kakao.com/tool/clear/og)
 - 계획 확인은 `node scripts/release.mjs <버전> --dry-run`을 사용한다. 새 메이저를 계획에 넣을 때도 `--chapter <N>`을 지정한다.

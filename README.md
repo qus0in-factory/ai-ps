@@ -23,6 +23,7 @@
 | 5 | `/adventure` | 상태 요약과 8비트 자산을 사용하는 텍스트 어드벤처 「잿빛 등대」 | [어드벤처](docs/adventure/) | [어드벤처](https://ai-ps.qus0in.workers.dev/adventure) |
 | 6 | `/talk` | 음성 인식·Realtime 음성 합성·R2 캐시를 사용하는 일본어 회화. 기존 릴리스는 5.2.x | [회화](docs/talk/) | [회화](https://ai-ps.qus0in.workers.dev/talk) |
 | 7 | `/research` | Brave·NAVER 검색과 웹 본문 읽기로 출처가 포함된 보고서 작성 | [리서치](docs/research/) | [리서치](https://ai-ps.qus0in.workers.dev/research) |
+| 10 | (라우트 없음) | 리서치 평가 하네스와 회귀 관문(궤적 코드 채점·루브릭·전후 비교) | [평가자](docs/research/evaluator.md) | — |
 
 ## 아키텍처
 

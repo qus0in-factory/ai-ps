@@ -123,6 +123,7 @@ tests/<layer>/research/   도메인·app·infra·ui 계층별 테스트  [ps-glm
 새 코드는 각 레이어의 테스트를 **먼저** 작성하고 BDD 서술(given/when/then)으로 의도를 남긴 뒤 구현한다. 전부 오프라인(`node --test`), 실서비스 호출은 수동 스모크로만 한다.
 
 - `tests/domain/research/` [ps-glm]: 도구 정의의 description에 사용 시점·도구 관계가 포함되는가, 조사 노트가 URL 없이 거부되는가, 추측 보충이 금지되는가, 상한 도달 시 tools 없는 마무리 지시가 만들어지는가, 보고서 프롬프트에 네 항목·출처 규칙이 들어가는가.
+- `tests/domain/research/checks.test.ts`, `tests/domain/research/rubric.test.ts`: 인용 정규화·미읽 인용·조사 성실성·루브릭 JSON 스키마·점수 범위 검증.
 - `tests/app/research/`: 가짜 CompletionGateway로 도구 호출이 `steps`에 순서대로 기록되는가, 실패 호출이 `ok: false`로 남는가, `capped`가 정확한가, 실패가 `{ error }`로 전달되는가.
 - `tests/infra/`: Brave 검색 어댑터(가짜 fetch — 제목·주소·요약 정돈, 키 비노출), 페이지 리더(가짜 HTML — 잡음 제거·4,000자 절단·실패 문자열), `http-research`(가짜 fetch — 200 검증, 400/429/502 해석, 타입·길이 위반 거부, 키·원문 미노출).
 - `tests/ui/http/`: `POST /api/research` 라우트(400/405/502, 응답 `{ error }`, Content-Type).
