@@ -1,5 +1,6 @@
 import { cancelResearchBody, readResearchBody, researchFailure, withResearchDeadline } from './research-http.ts';
 import type { ResearchAdapterResult } from './research-http.ts';
+import { extractResearchHtml } from './research-html-extraction.ts';
 
 export interface ResearchWebpage { url: string; title: string; content: string }
 /** An injected resolver must return every A/AAAA address, not just the first answer. */
@@ -61,31 +62,6 @@ async function resolvePublicDns(hostname: string, signal: AbortSignal, fetcher: 
   return addresses;
 }
 
-function decodeEntities(text: string): string {
-  const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', hellip: '…', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', copy: '©' };
-  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
-    if (!name.startsWith('#')) return named[name.toLowerCase()] ?? entity;
-    const codepoint = name[1]?.toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : Number(name.slice(1));
-    return codepoint > 0 && codepoint <= 0x10ffff && !(codepoint >= 0xd800 && codepoint <= 0xdfff) ? String.fromCodePoint(codepoint) : '�';
-  });
-}
-
-function cleanText(html: string): string {
-  return decodeEntities(html.replace(/<[^>]*>/g, ' ')).replace(/[\t\r\f\v ]+/g, ' ')
-    .split('\n').map(line => line.trim()).filter(Boolean).join('\n').trim();
-}
-
-function extractHtml(html: string): { title: string; content: string } {
-  const withoutComments = html.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
-  const title = cleanText(withoutComments.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] ?? '');
-  const cleaned = withoutComments
-    .replace(/<(script|style|noscript|template|svg|nav|header|footer|aside|form|iframe)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, '')
-    .replace(/<head\b[^>]*>[\s\S]*?(?:<\/head\s*>|$)/gi, '');
-  const main = cleaned.match(/<main\b[^>]*>([\s\S]*?)<\/main\s*>/i)?.[1]
-    ?? cleaned.match(/<article\b[^>]*>([\s\S]*?)<\/article\s*>/i)?.[1] ?? cleaned;
-  return { title, content: cleanText(main.replace(/<\/?(?:p|div|h[1-6]|li|br|section|article|tr|blockquote)\b[^>]*>/gi, '\n')) };
-}
-
 export function createResearchWebReader(config: {
   fetcher?: typeof fetch; lookup?: ResearchDnsLookup; timeoutMs?: number;
   allowedHosts?: ReadonlySet<string>; allowIpLiterals?: boolean;
@@ -121,8 +97,9 @@ export function createResearchWebReader(config: {
             if (!['text/html', 'application/xhtml+xml', 'text/plain'].includes(mediaType ?? '')) {
               cancelResearchBody(response); throw new Error('Unsupported content type');
             }
-            const raw = await readResearchBody(response, signal);
-            const extracted = mediaType === 'text/plain' ? { title: '', content: raw.trim() } : extractHtml(raw);
+            const extracted = mediaType === 'text/plain'
+              ? { title: '', content: (await readResearchBody(response, signal)).trim() }
+              : await extractResearchHtml(response, signal);
             if (!extracted.content) throw new Error('No readable text');
             return { ok: true, value: { url: url.href, title: extracted.title.slice(0, 500), content: extracted.content.slice(0, 4000) } };
           }
