@@ -2,8 +2,10 @@ import type { Result } from '../domain/chat.ts';
 import { pcm16ToWav } from '../domain/talk/audio.ts';
 import { MAX_TTS_TEXT_LENGTH, type AudioClip, type Speaker } from '../domain/talk/speech-cache.ts';
 import { createOpenAIClient, type OpenAIClient } from './openai.ts';
+import { createConsoleLogger } from './console-logger.ts';
 
 export const REALTIME_SPEECH_PROMPT_VERSION = 'ja-read-v1';
+const defaultWarn = createConsoleLogger().warn;
 const INSTRUCTIONS = '入力された日本語の文章を、そのまま読み上げてください。親切な日本語教師のように、はっきりと適度な速さで話してください。質問に答えたり、言葉を加えたり、翻訳したりしないでください。';
 const MAX_WAV_BYTES = 2 * 1024 * 1024;
 
@@ -118,7 +120,7 @@ export function createRealtimeSpeaker(config: {
               for (const chunk of chunks) { pcm.set(chunk, offset); offset += chunk.length; }
               const inputLength = [...text].length;
               if (transcriptLength !== undefined && (transcriptLength > inputLength * 2 || transcriptLength * 2 < inputLength)) {
-                try { (config.warn ?? console.warn)({ event: 'tts_transcript_length_mismatch', inputLength, outputLength: transcriptLength }); }
+                try { (config.warn ?? defaultWarn)({ event: 'tts_transcript_length_mismatch', inputLength, outputLength: transcriptLength }); }
                 catch { /* Logging must not discard generated speech. */ }
               }
               finish({ ok: true, value: { bytes: pcm16ToWav(pcm), mimeType: 'audio/wav' } });

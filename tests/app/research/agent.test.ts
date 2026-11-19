@@ -40,14 +40,18 @@ function fakeTools(overrides: {
 } = {}) {
   const searchCalls: Array<{ query: string; maxResults: number }> = [];
   const readCalls: string[] = [];
-  const search: ResearchSearchPort = overrides.search ?? (async (query: string, maxResults: number) => {
+  const searchImpl: ResearchSearchPort = overrides.search ?? (async () => ({
+    ok: true, value: [{ title: '첫 결과', url: 'https://example.com/a', summary: '첫 요약' }],
+  }));
+  const search: ResearchSearchPort = (query, maxResults) => {
     searchCalls.push({ query, maxResults });
-    return { ok: true, value: [{ title: '첫 결과', url: 'https://example.com/a', summary: '첫 요약' }] };
-  });
-  const read: ResearchPagePort = overrides.read ?? (async (url: string) => {
+    return searchImpl(query, maxResults);
+  };
+  const readImpl: ResearchPagePort = overrides.read ?? (async () => ({ ok: true, value: '페이지 본문' }));
+  const read: ResearchPagePort = (url) => {
     readCalls.push(url);
-    return { ok: true, value: '페이지 본문' };
-  });
+    return readImpl(url);
+  };
   return { search, read, searchCalls, readCalls };
 }
 
@@ -100,7 +104,10 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       { ok: true, value: text('노트 완성') },
       { ok: true, value: text('보고서') },
     ]);
-    const tools = fakeTools();
+    const tools = fakeTools({ search: async () => ({ ok: true, value: [
+      { title: '첫 결과', url: 'https://example.com/1', summary: '첫 요약' },
+      { title: '둘째 결과', url: 'https://example.com/2', summary: '둘째 요약' },
+    ] }) });
     const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('주제');
     assert.ok(outcome.ok);
     if (outcome.ok) {
@@ -114,7 +121,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     assert.deepEqual(tools.searchCalls, [{ query: '엣지', maxResults: 5 }]);
     assert.deepEqual(tools.readCalls, ['https://example.com/1', 'https://example.com/2']);
     assert.deepEqual(calls[1]!.messages.slice(-3), [
-      { role: 'tool', tool_call_id: 's1', content: '<untrusted kind="search_result">\n1. 첫 결과\n   주소: https://example.com/a\n   요약: 첫 요약\n</untrusted>' },
+      { role: 'tool', tool_call_id: 's1', content: '<untrusted kind="search_result">\n1. 첫 결과\n   주소: https://example.com/1\n   요약: 첫 요약\n2. 둘째 결과\n   주소: https://example.com/2\n   요약: 둘째 요약\n</untrusted>' },
       { role: 'tool', tool_call_id: 'r1', content: '<untrusted kind="web_page">\n페이지 본문\n</untrusted>' },
       { role: 'tool', tool_call_id: 'r2', content: '<untrusted kind="web_page">\n페이지 본문\n</untrusted>' },
     ]);
@@ -141,7 +148,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     const toolMessages = calls[1]!.messages.filter((message) => message.role === 'tool');
     assert.ok(toolMessages[0]!.content.includes('HTTP 429'));
     assert.match(toolMessages[0]!.content, /다시 시도해보세요/);
-    assert.match(toolMessages[1]!.content, /다른 페이지를 시도해보세요/);
+    assert.match(toolMessages[1]!.content, /검색 결과에 나온 주소만/);
     assert.match(toolMessages[2]!.content, /read_webpage/);
     assert.match(toolMessages[3]!.content, /검색 결과가 없습니다\./);
     assert.match(toolMessages[3]!.content, /<untrusted kind="search_result">/);
@@ -188,13 +195,16 @@ describe('Given the research agent with a scripted model and fake tools', () => 
 
   it('When a page body is longer than 4000 characters Then the tool message is truncated', async () => {
     const { model, calls } = fakeModel([
+      { ok: true, value: call('s1', 'search_web', { query: '긴 글' }) },
       { ok: true, value: call('r1', 'read_webpage', { url: 'https://example.com/long' }) },
       { ok: true, value: text('노트') },
       { ok: true, value: text('보고서') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
     ]);
     const read: ResearchPagePort = async () => ({ ok: true as const, value: '긴'.repeat(5000) });
-    await createResearchAgent({ model, search: emptySearch, read }).run('주제');
-    const toolMessage = calls[1]!.messages.at(-1);
+    const search = async () => ({ ok: true as const, value: [{ title: '긴 글', url: 'https://example.com/long', summary: '요약' }] });
+    await createResearchAgent({ model, search, read }).run('주제');
+    const toolMessage = calls[2]!.messages.at(-1);
     assert.equal(toolMessage?.role, 'tool');
     const content = String((toolMessage as { content: string } | undefined)?.content);
     assert.ok(content.includes('긴'.repeat(4000)));
@@ -229,19 +239,66 @@ describe('Given the research agent with a scripted model and fake tools', () => 
   it('When the report links to an unverified URL Then the final report unwraps only that link', async () => {
     const { model } = fakeModel([
       { ok: true, value: { role: 'assistant', content: null, tool_calls: [
+        { id: 's1', type: 'function', function: { name: 'search_web', arguments: '{"query":"사실"}' } },
+      ] } },
+      { ok: true, value: { role: 'assistant', content: null, tool_calls: [
         { id: 'r1', type: 'function', function: { name: 'read_webpage', arguments: '{"url":"https://example.com/1"}' } },
       ] } },
       { ok: true, value: text('노트: 사실 (https://example.com/1)') },
       { ok: true, value: text('## 개요\n[확인](https://example.com/1) [낯선](https://evil.test/x)') },
       { ok: true, value: text('{"passed":true,"problems":[]}') },
     ]);
-    const tools = fakeTools();
+    const tools = fakeTools({ search: async () => ({ ok: true, value: [
+      { title: '사실', url: 'https://example.com/1', summary: '요약' },
+    ] }) });
     const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('주제');
     assert.equal(outcome.ok, true);
     if (outcome.ok) {
       assert.match(outcome.value.report, /\[확인\]\(https:\/\/example\.com\/1\)/);
       assert.ok(outcome.value.report.includes('낯선'));
       assert.ok(!outcome.value.report.includes('https://evil.test/x'));
+    }
+  });
+
+  it('When a read differs only by a trailing slash or fragment Then it is allowed', async () => {
+    const { model } = fakeModel([
+      { ok: true, value: call('s1', 'search_web', { query: 'a' }) },
+      { ok: true, value: call('r1', 'read_webpage', { url: 'https://example.com/a#section' }) },
+      { ok: true, value: text('노트') },
+      { ok: true, value: text('보고서') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
+    ]);
+    const tools = fakeTools({ search: async () => ({ ok: true, value: [
+      { title: 'a', url: 'https://example.com/a/', summary: '요약' },
+    ] }) });
+    const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('주제');
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(tools.readCalls, ['https://example.com/a#section']);
+    if (outcome.ok) assert.equal(outcome.value.steps[1]!.ok, true);
+  });
+
+  it('When a read uses another path or query on the same host Then the port is not called', async () => {
+    const { model, calls } = fakeModel([
+      { ok: true, value: call('s1', 'search_web', { query: 'a' }) },
+      { ok: true, value: { role: 'assistant', content: null, tool_calls: [
+        { id: 'r1', type: 'function', function: { name: 'read_webpage', arguments: '{"url":"https://example.com/b"}' } },
+        { id: 'r2', type: 'function', function: { name: 'read_webpage', arguments: '{"url":"https://example.com/a?q=대화내용"}' } },
+      ] } },
+      { ok: true, value: text('노트') },
+      { ok: true, value: text('보고서') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
+    ]);
+    const tools = fakeTools({ search: async () => ({ ok: true, value: [
+      { title: 'a', url: 'https://example.com/a', summary: '요약' },
+    ] }) });
+    const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('주제');
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(tools.readCalls, []);
+    const toolMessages = calls[2]!.messages.filter(message => message.role === 'tool' && String(message.content).includes('검색 결과에 나온 주소만'));
+    assert.equal(toolMessages.length, 2);
+    for (const message of toolMessages) assert.match(String(message.content), /검색 결과에 나온 주소만/);
+    if (outcome.ok) {
+      assert.deepEqual(outcome.value.steps.slice(1).map(step => step.ok), [false, false]);
     }
   });
 

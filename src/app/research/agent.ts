@@ -115,7 +115,7 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
     }
     conversation.push(message);
     for (const toolCall of message.tool_calls) {
-      const outcome = await executeToolCall(ports, toolCall, turn);
+      const outcome = await executeToolCall(ports, toolCall, turn, hits);
       if (outcome.step) steps.push(outcome.step);
       for (const hit of outcome.hits ?? []) {
         if (!hits.some((existing) => existing.url === hit.url)) hits.push(hit);
@@ -164,14 +164,14 @@ interface ToolCallOutcome {
   hits?: SearchHit[];
 }
 
-async function executeToolCall(ports: ResearchAgentPorts, toolCall: FunctionToolCall, turn: number): Promise<ToolCallOutcome> {
+async function executeToolCall(ports: ResearchAgentPorts, toolCall: FunctionToolCall, turn: number, hits: readonly SearchHit[]): Promise<ToolCallOutcome> {
   const name = toolCall.function.name;
   if (name !== 'search_web' && name !== 'read_webpage') {
     return { content: formatUnknownTool(name), ok: false };
   }
   ports.log?.({ event: 'tool_call', turn, name });
   const args = parseArguments(toolCall.function.arguments);
-  const outcome = name === 'search_web' ? await runSearch(ports, args) : await runRead(ports, args);
+  const outcome = name === 'search_web' ? await runSearch(ports, args) : await runRead(ports, args, hits);
   ports.log?.({ event: 'tool_result', turn, name, ok: outcome.ok });
   return outcome;
 }
@@ -195,11 +195,26 @@ async function runSearch(ports: ResearchAgentPorts, args: Record<string, unknown
   }
 }
 
-async function runRead(ports: ResearchAgentPorts, args: Record<string, unknown>): Promise<ToolCallOutcome> {
+function comparableUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    const path = url.pathname.replace(/\/+$/, '');
+    return `${url.origin}${path}${url.search}`;
+  } catch {
+    return value;
+  }
+}
+
+async function runRead(ports: ResearchAgentPorts, args: Record<string, unknown>, hits: readonly SearchHit[]): Promise<ToolCallOutcome> {
   const url = typeof args.url === 'string' ? args.url.trim() : '';
   if (!url) {
     return { ok: false, step: { tool: 'read_webpage', args, ok: false },
       content: formatToolError('read_webpage', 'URL을 1자 이상 입력해야 합니다.') };
+  }
+  if (!hits.some(hit => comparableUrl(hit.url) === comparableUrl(url))) {
+    return { ok: false, step: { tool: 'read_webpage', args, ok: false },
+      content: formatToolError('read_webpage', '검색 결과에 나온 주소만 읽을 수 있습니다') };
   }
   try {
     const result = await ports.read(url);

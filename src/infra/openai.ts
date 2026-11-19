@@ -1,9 +1,12 @@
 import type { CompletionGateway, CompletionMessage, CompletionOptions, CompletionParams, CompletionResponse, FunctionCompletionGateway } from '../domain/completion.ts';
 import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
+import { redactDiagnostic } from '../domain/redact.ts';
 import { fetchWithRetry, isRetryableStatus } from './http-client.ts';
+import { createConsoleLogger } from './console-logger.ts';
 
 export const DEFAULT_FALLBACK_MODEL = 'gpt-6.1-terra';
+const logger = createConsoleLogger();
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const OPENAI_TIMEOUTS = { completion: 60_000, transcription: 30_000, speech: 30_000 } as const;
 const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
@@ -52,19 +55,11 @@ type ProviderCompletionParams = Omit<CompletionParams, 'tools'> & {
 
 // Provider diagnostics are untrusted: never reuse them as a public failure reason.
 function logCompletionError(message: string, apiKey: string | undefined, status?: number, debug = false, timedOut = false) {
-  const key = apiKey?.trim();
-  const redacted = (key ? message.split(key).join('[REDACTED]') : message)
-    .replace(/https?:\/\/[^\s<>"']+/gi, '[REDACTED_URL]')
-    .replace(/\b(?:Bearer|Basic)\s+[^\s,;"']+/gi, '[REDACTED_AUTH]')
-    .replace(/\b(?:sk-|gsk_|xai-|hf_|AIza|AKIA)[a-zA-Z0-9_-]+/g, '[REDACTED_KEY]')
-    .replace(/(["']?(?:api[-_]?key|access[-_]?token|token|secret|password|authorization)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
-    .replace(/\b[a-zA-Z0-9_+\/=-]{32,}\b/g, '[REDACTED_KEY]')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .slice(0, 512);
+  const redacted = redactDiagnostic(message, apiKey);
   try {
     const entry = { event: 'completion_error', code: timedOut ? 'provider_timeout' : status === undefined ? 'provider_connection_error' : 'provider_http_error', ...(status === undefined ? {} : { status }) };
-    console.error(entry);
-    if (debug) console.debug({ ...entry, message: redacted });
+    logger.error(entry);
+    if (debug) logger.info({ ...entry, message: redacted });
   } catch {
     // Logging must not turn a safe failure into an exception.
   }

@@ -332,7 +332,7 @@ describe('Given completion output and diagnostic budgets', () => {
   it('When debug diagnostics are explicitly enabled Then only debug receives a redacted bounded message', async t => {
     const errors: unknown[] = [], debug: unknown[] = [];
     t.mock.method(console, 'error', (entry: unknown) => errors.push(entry));
-    t.mock.method(console, 'debug', (entry: unknown) => debug.push(entry));
+    t.mock.method(console, 'info', (entry: unknown) => debug.push(entry));
     const model = createOpenAICompletion({ model: 'test', apiKey: 'sk-private-secret', debugErrors: true, fetcher: async () => Response.json({ error: { message: 'private user phrase sk-private-secret ' + 'x'.repeat(2000) } }, { status: 400 }) });
     await model.complete([]);
     assert.ok(!JSON.stringify(errors).includes('private user phrase'));

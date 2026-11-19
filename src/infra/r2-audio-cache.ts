@@ -1,4 +1,7 @@
 import type { AudioCache } from '../domain/talk/speech-cache.ts';
+import { createConsoleLogger } from './console-logger.ts';
+
+const defaultWarn = createConsoleLogger().warn;
 
 /** Structural subset of the Workers binding; no SDK runtime is needed. */
 export interface R2Bucket {
@@ -19,7 +22,7 @@ export function createR2AudioCache(bucket?: R2Bucket, options: {
       if (!bucket) {
         if (!warnedMissingBinding) {
           warnedMissingBinding = true;
-          try { (options.warn ?? console.warn)({ event: 'tts_cache_unbound' }); } catch { /* Best-effort warning. */ }
+          try { (options.warn ?? defaultWarn)({ event: 'tts_cache_unbound' }); } catch { /* Best-effort warning. */ }
         }
         return { ok: true, value: null };
       }

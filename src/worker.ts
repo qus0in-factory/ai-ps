@@ -17,6 +17,7 @@ import { createConsoleLogger } from './infra/console-logger.ts';
 import { createOpenAIClient, createOpenAICompletion } from './infra/openai.ts';
 import { createHttpClient } from './infra/http-client.ts';
 import { createUsageRecorder, type UsageDatabase, type UsageRecorder } from './infra/usage-recorder.ts';
+import { pruneUsageEvents } from './infra/usage-retention.ts';
 import { createApi } from './ui/http/api.ts';
 import { createTutor } from './app/talk/tutor.ts';
 import { createOpenAITranscriber } from './infra/openai-transcribe.ts';
@@ -171,5 +172,10 @@ export default {
         await flushNow();
       },
     }), { status: response.status, headers: response.headers });
+  },
+  async scheduled(_controller: unknown, env: Env): Promise<void> {
+    const logger = createConsoleLogger({ level: env.LOG_LEVEL });
+    try { await pruneUsageEvents(env.USAGE_DB, Date.now()); }
+    catch { logger.warn({ event: 'usage_prune_error' }); }
   },
 };

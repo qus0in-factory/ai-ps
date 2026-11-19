@@ -2,6 +2,9 @@
 
 export type UsageService = 'openai' | 'brave' | 'ncp';
 
+/** 사용량 행 보관 기간(/stats 최대 30일 + UTC 경계 여유). Cron 삭제가 이 값을 쓴다. */
+export const USAGE_RETENTION_DAYS = 35;
+
 export type UsageOp = 'completion' | 'transcribe' | 'realtime' | 'search';
 
 /** 기록 시점 단가로 costUsd를 계산해 D1에 저장한다(단가 변경은 과거 행에 소급되지 않는다). */
