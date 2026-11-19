@@ -1,4 +1,4 @@
-import type { CompletionGateway } from '../../domain/completion.ts';
+import type { CompletionGateway, JsonSchemaResponseFormat } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { TalkSession, Tutor, Reporter } from '../../domain/talk/types.ts';
 import type { TalkLogEntry, TalkLogListener } from '../../domain/talk/logging.ts';
@@ -7,6 +7,25 @@ import { normalizeSession, record, only, text, canAddTurn, LIMITS } from '../../
 import { TALK_FIXED_PHRASES } from '../../domain/talk/speech-cache.ts';
 import { parseTutorReply } from '../../domain/talk/reply.ts';
 import { buildTutorMessages, buildReportMessages } from '../../domain/talk/prompt.ts';
+
+const TUTOR_REPLY_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'tutor_reply',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        mood: { type: 'string', enum: ['neutral', 'smile', 'think', 'surprised', 'encourage', 'confused'] },
+        reply: { type: 'string' },
+        correction: { type: ['string', 'null'] },
+        betterExpression: { type: ['string', 'null'] },
+      },
+      required: ['mood', 'reply', 'correction', 'betterExpression'],
+      additionalProperties: false,
+    },
+  },
+};
 
 export function parseTurnRequest(body: unknown): Result<{ session: TalkSession; text?: string }> {
   if (!record(body) || !only(body, ['session','text'])) return { ok: false, reason: '올바른 세션과 텍스트가 필요합니다.' };
@@ -37,7 +56,7 @@ export function createTutor(model: CompletionGateway, options: { log?: TalkLogLi
       });
       const result = await Promise.race([model.complete(messages, {
         reasoning_effort: 'none', max_completion_tokens: 800, signal,
-        ...(json ? { response_format: { type: 'json_object' as const } } : {}),
+        ...(json ? { response_format: TUTOR_REPLY_FORMAT } : {}),
       }), aborted]);
       if (signal.aborted) return cancelled();
       if (!result.ok) return { ok: false as const, reason: '회화 응답을 가져오지 못했습니다. 다시 시도해 주세요.' };

@@ -6,6 +6,10 @@ import { createTools } from '../../src/infra/tools.ts';
 import { readFileSync } from 'node:fs';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/openweather.json', import.meta.url), 'utf8'));
+const schemaFormat = {
+  type: 'json_schema',
+  json_schema: { name: 'test_response', strict: true, schema: { type: 'object', properties: {}, required: [], additionalProperties: false } },
+} as const;
 
 describe('Given OpenAI completion wired to OpenWeather tools', () => {
   it('When a weather question triggers a tool Then completes the full fetch sequence', async () => {
@@ -20,7 +24,8 @@ describe('Given OpenAI completion wired to OpenWeather tools', () => {
       assert.equal(body.model, 'test-model');
       assert.equal(body.tools, undefined);
       assert.equal(body.tool_choice, undefined);
-      assert.deepEqual(body.response_format, { type: 'json_object' });
+      assert.equal((body.response_format as { type?: string }).type, 'json_schema');
+      assert.equal((body.response_format as { json_schema?: { strict?: boolean } }).json_schema?.strict, true);
       assert.equal(body.messages[0].role, 'system');
       assert.ok(body.messages[0].content.includes('get_current_weather'));
       assert.equal(body.stream, false);
@@ -118,14 +123,14 @@ describe('Given a JSON-mode completion without tools', () => {
         body = JSON.parse(String(init?.body));
         return Response.json({ choices: [{ message: { role: 'assistant', content: '{"regions":[]}' } }] });
       } });
-      assert.equal((await model.complete([], { response_format: { type: 'json_object' } })).ok, true);
+      assert.equal((await model.complete([], { response_format: schemaFormat })).ok, true);
       assert.equal(body.reasoning_effort, reasoningEffort);
-      assert.deepEqual(body.response_format, { type: 'json_object' });
+      assert.deepEqual(body.response_format, schemaFormat);
       for (const key of ['temperature', 'tools', 'tool_choice', 'parallel_tool_calls']) assert.equal(key in body, false);
     });
   }
 
-  it('When only response_format json_object is passed Then omits temperature, reasoning_effort, tools, and tool_choice from the request body', async () => {
+  it('When only response_format json_schema is passed Then omits temperature, reasoning_effort, tools, and tool_choice from the request body', async () => {
     let capturedBody: Record<string, unknown> | undefined;
     const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async (_url, init) => {
       capturedBody = JSON.parse(init!.body as string) as Record<string, unknown>;
@@ -133,15 +138,44 @@ describe('Given a JSON-mode completion without tools', () => {
     } });
     const result = await model.complete(
       [{ role: 'user', content: '영역 디자인' }],
-      { response_format: { type: 'json_object' } },
+      { response_format: schemaFormat },
     );
     assert.equal(result.ok, true);
     assert.ok(capturedBody);
-    assert.deepEqual(capturedBody.response_format, { type: 'json_object' });
+    assert.deepEqual(capturedBody.response_format, schemaFormat);
     assert.equal('temperature' in capturedBody, false);
     assert.equal('reasoning_effort' in capturedBody, false);
     assert.equal('tools' in capturedBody, false);
     assert.equal('tool_choice' in capturedBody, false);
+  });
+});
+
+
+describe('Given structured output must use strict JSON Schema', () => {
+  it('When json_object is passed Then rejects the request before calling the provider', async () => {
+    let called = false;
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async () => {
+      called = true;
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '{}' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '테스트' }], {
+      response_format: { type: 'json_object' },
+    } as never);
+    assert.equal(result.ok, false);
+    assert.equal(called, false);
+  });
+
+  it('When json_schema is not strict Then rejects the request before calling the provider', async () => {
+    let called = false;
+    const model = createOpenAICompletion({ model: 'test-model', apiKey: 'test', fetcher: async () => {
+      called = true;
+      return Response.json({ choices: [{ message: { role: 'assistant', content: '{}' } }] });
+    } });
+    const result = await model.complete([{ role: 'user', content: '테스트' }], {
+      response_format: { type: 'json_schema', json_schema: { name: 'test', strict: false, schema: { type: 'object' } } },
+    } as never);
+    assert.equal(result.ok, false);
+    assert.equal(called, false);
   });
 });
 
@@ -292,11 +326,11 @@ describe('Given tool-specific completion options without tools', () => {
         body = JSON.parse(String(init?.body));
         return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
       } });
-      const options = { response_format: { type: 'json_object' as const }, parallel_tool_calls: false, tool_choice: { type: 'function' as const, function: { name: 'roll_dice' } } };
+      const options = { response_format: schemaFormat, parallel_tool_calls: false, tool_choice: { type: 'function' as const, function: { name: 'roll_dice' } } };
       const result = nativeSignature ? await model.complete([], [], options) : await model.complete([], options);
       assert.equal(result.ok, true);
       for (const key of ['tools', 'tool_choice', 'parallel_tool_calls']) assert.equal(Object.hasOwn(body, key), false);
-      assert.deepEqual(body.response_format, { type: 'json_object' });
+      assert.deepEqual(body.response_format, schemaFormat);
     });
   }
 });

@@ -48,7 +48,8 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     assert.equal(result.ok, true);
     assert.equal(calls, 1);
     assert.ok(captured?.options?.signal instanceof AbortSignal);
-    assert.deepEqual(captured?.options?.response_format, { type: 'json_object' });
+    assert.equal(captured?.options?.response_format?.type, 'json_schema');
+    assert.equal(captured?.options?.response_format?.json_schema.strict, true);
     assert.ok(captured!.messages[0]!.content.length < 600);
     assert.doesNotMatch(captured!.messages[0]!.content, /unique|only solution|mentally/i);
     assert.deepEqual(JSON.parse(captured!.messages[1]!.content), { size: 5, queens: solution });

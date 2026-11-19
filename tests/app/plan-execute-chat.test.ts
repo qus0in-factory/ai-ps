@@ -35,7 +35,8 @@ describe('Given Plan and Execute with a ReAct executor', () => {
     const progress: AgentStep[] = [];
     let calls = 0;
     const chat = createPlanExecuteChat({ complete: async (messages, options) => {
-      assert.equal(options?.response_format?.type, 'json_object');
+      assert.equal(options?.response_format?.type, 'json_schema');
+      assert.equal(options?.response_format?.json_schema.strict, true);
       calls++;
       if (calls === 1) return answer(plan);
       if (calls === 2 || calls === 4) {

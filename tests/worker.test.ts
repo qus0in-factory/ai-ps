@@ -25,7 +25,8 @@ describe('Given the Workers composition root', () => {
     assert.equal(requests.length, 3);
     assert.deepEqual(requests.map(body => body.reasoning_effort), ['none', undefined, undefined]);
     assert.ok(requests.every(body => body.model === 'test-model'));
-    assert.deepEqual(requests[0]!.response_format, { type: 'json_object' });
+    assert.equal((requests[0]!.response_format as { type?: string }).type, 'json_schema');
+    assert.equal((requests[0]!.response_format as { json_schema?: { strict?: boolean } }).json_schema?.strict, true);
     assert.equal('temperature' in requests[0]!, false);
     assert.equal('tools' in requests[0]!, false);
   });

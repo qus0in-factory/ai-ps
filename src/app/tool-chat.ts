@@ -1,7 +1,27 @@
 import type { ChatGateway, ChatMessage, Result } from '../domain/chat.ts';
-import type { CompletionGateway } from '../domain/completion.ts';
+import type { CompletionGateway, JsonSchemaResponseFormat } from '../domain/completion.ts';
 import { parseToolResponse, toolCallKey } from '../domain/tool-response.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
+
+const TOOL_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'tool_chat_response',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['message', 'tool_call'] },
+        thought: { type: 'string' },
+        content: { type: ['string', 'null'] },
+        name: { type: ['string', 'null'] },
+        arguments: { type: ['string', 'null'] },
+      },
+      required: ['type', 'thought', 'content', 'name', 'arguments'],
+      additionalProperties: false,
+    },
+  },
+};
 
 export function createToolChat(
   model: CompletionGateway, tools: Tool[], log?: ToolLogger,
@@ -13,8 +33,9 @@ export function createToolChat(
     'Every response MUST be exactly one JSON object. No markdown fences or text outside JSON.',
     'Follow a ReAct cycle: briefly summarize the next action, call a tool, observe its result, then decide the next step.',
     'The thought field is one short user-visible action summary, not detailed private reasoning.',
-    'To answer the user: {"type":"message","thought":"brief conclusion summary","content":"your answer"}.',
-    'To call a tool: {"type":"tool_call","thought":"brief next-action summary","name":"tool_name","arguments":{}}.',
+    'To answer the user: {"type":"message","thought":"brief conclusion summary","content":"your answer","name":null,"arguments":null}.',
+    'To call a tool: {"type":"tool_call","thought":"brief next-action summary","name":"tool_name","arguments":"{\\"param\\":\\"value\\"}","content":null}.',
+    'The schema requires every key; use null for the keys that do not apply. Encode tool arguments as a JSON string.',
     'Use only registered tools and follow their parameter schemas. Call one tool at a time.',
     'Use get_current_time for current date/time and get_current_weather for current weather; do not guess live data.',
     'For a two-city temperature comparison, call get_current_weather separately for BOTH cities before answering. Keep each observation, compare temperature_c, state both temperatures and the difference in °C. Do not use feels_like_c for this comparison. If either lookup fails, explain that a reliable comparison is unavailable.',
@@ -45,7 +66,7 @@ export function createToolChat(
       };
       for (let turn = 1; turn <= maxTurns; turn++) {
         log?.({ event: 'model_request', turn });
-        const result = await model.complete(conversation, { response_format: { type: 'json_object' } });
+        const result = await model.complete(conversation, { response_format: TOOL_RESPONSE_FORMAT });
         if (!result.ok) {
           log?.({ event: 'model_error', turn, reason: result.reason });
           return result;
@@ -61,7 +82,7 @@ export function createToolChat(
             if (content) conversation.push({ role: 'assistant', content });
             conversation.push({
               role: 'user',
-              content: 'Your last response did not match the required JSON format. Respond with exactly one JSON object: {"type":"message","content":"final answer"} or {"type":"tool_call","name":"registered tool name","arguments":{}}. If live data is needed, request the tool. No markdown fences or explanation outside JSON.',
+              content: 'Your last response did not match the required JSON schema. Respond with exactly one JSON object matching the schema: {"type":"message","thought":"…","content":"final answer","name":null,"arguments":null} or {"type":"tool_call","thought":"…","name":"registered tool name","arguments":"{\\"param\\":\\"value\\"}","content":null}. If live data is needed, request the tool. No markdown fences or explanation outside JSON.',
             });
             continue;
           }

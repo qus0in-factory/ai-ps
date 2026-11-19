@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createToolChat } from '../../src/app/tool-chat.ts';
+import type { CompletionOptions } from '../../src/domain/completion.ts';
 import type { Tool, ToolLogEvent } from '../../src/domain/tools.ts';
 
 const definition = {
@@ -10,6 +11,22 @@ const definition = {
 const answer = (content: string) => ({ ok: true as const, value: { role: 'assistant' as const, content } });
 
 describe('Given a chat using prompted JSON tool calls', () => {
+  it('When the model requests a tool Then sends strict json_schema and accepts JSON-string arguments', async () => {
+    let turn = 0;
+    let options: CompletionOptions | undefined;
+    const chat = createToolChat({ complete: async (_messages, next) => {
+      options = next;
+      if (turn++ === 0) return answer('{"type":"tool_call","thought":"조회","name":"get_current_weather","arguments":"{\\"city\\":\\"Seoul,KR\\"}","content":null}');
+      return answer('{"type":"message","thought":"완료","content":"서울은 10도입니다.","name":null,"arguments":null}');
+    } }, [{ definition, execute: async (args) => {
+      assert.deepEqual(args, { city: 'Seoul,KR' });
+      return { ok: true, value: { temperature: 10 } };
+    } }]);
+    assert.deepEqual(await chat.complete([{ role: 'user', content: '서울 날씨' }]), { ok: true, value: '서울은 10도입니다.' });
+    assert.equal(options?.response_format?.type, 'json_schema');
+    assert.equal(options?.response_format?.json_schema.strict, true);
+  });
+
   it('When the model requests a tool Then parses JSON and sends the result back as a message', async () => {
     let turn = 0;
     const logs: ToolLogEvent[] = [];

@@ -1,12 +1,60 @@
-import type { FunctionCompletionGateway, CompletionMessage, CompletionOptions } from '../../domain/completion.ts';
+import type { FunctionCompletionGateway, CompletionMessage, CompletionOptions, JsonSchemaResponseFormat } from '../../domain/completion.ts';
 import type { Result } from '../../domain/chat.ts';
 import type { AdventureSession, AdventureListener, GameMaster } from '../../domain/adventure/types.ts';
 import type { AdventureLogListener } from '../../domain/adventure/logging.ts';
-import { createSession, normalizeSession, MAX_TURNS, record, text } from '../../domain/adventure/session.ts';
+import { createSession, normalizeSession, MAX_TURNS, LOCATIONS, TIMES, WEATHER, PARTS, record, text } from '../../domain/adventure/session.ts';
 import { buildTurnMessages, trimHistory, splitForSummary, buildSummaryMessages, applySummary } from '../../domain/adventure/history.ts';
 import { parseTurnOutcome } from '../../domain/adventure/outcome.ts';
 import { applyTurn } from '../../domain/adventure/rules.ts';
 import { DICE_TOOL, rollDice } from '../../domain/adventure/dice.ts';
+
+const TURN_OUTCOME_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'adventure_turn_outcome',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        narrative: { type: 'string' },
+        statChanges: {
+          type: 'object',
+          properties: {
+            health: { type: 'integer' },
+            warmth: { type: 'integer' },
+            focus: { type: 'integer' },
+          },
+          required: ['health', 'warmth', 'focus'],
+          additionalProperties: false,
+        },
+        addItems: { type: 'array', items: { type: 'string' } },
+        removeItems: { type: 'array', items: { type: 'string' } },
+        day: { type: ['integer', 'null'] },
+        location: { type: ['string', 'null'], enum: [...LOCATIONS, null] },
+        time: { type: ['string', 'null'], enum: [...TIMES, null] },
+        weather: { type: ['string', 'null'], enum: [...WEATHER, null] },
+        repaired: { type: ['array', 'null'], items: { type: 'string', enum: [...PARTS] } },
+        sleep: { type: ['boolean', 'null'] },
+        lampLit: { type: ['boolean', 'null'] },
+      },
+      required: ['narrative', 'statChanges', 'addItems', 'removeItems', 'day', 'location', 'time', 'weather', 'repaired', 'sleep', 'lampLit'],
+      additionalProperties: false,
+    },
+  },
+};
+
+const NULLABLE_OUTCOME_KEYS = ['day', 'location', 'time', 'weather', 'repaired', 'sleep', 'lampLit'] as const;
+
+function normalizeOutcome(content: string): string {
+  try {
+    const value: unknown = JSON.parse(content);
+    if (!record(value)) return content;
+    for (const key of NULLABLE_OUTCOME_KEYS) if (value[key] === null) delete value[key];
+    return JSON.stringify(value);
+  } catch {
+    return content;
+  }
+}
 
 export function parseAdventureTurn(body: unknown): Result<{ session: AdventureSession; action: string }> {
   const session = record(body) ? normalizeSession(body.session) : undefined;
@@ -35,7 +83,7 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
       });
       const options: CompletionOptions = summarize
         ? { max_completion_tokens: 400, reasoning_effort: 'none', ...(temp === undefined ? {} : { temperature: 0.3 }) }
-        : { max_completion_tokens: 1600, response_format: { type: 'json_object' }, ...(temp === undefined ? {} : { temperature: temp }) };
+        : { max_completion_tokens: 1600, response_format: TURN_OUTCOME_FORMAT, ...(temp === undefined ? {} : { temperature: temp }) };
       const result = await Promise.race([model.complete(messages, tools, { ...options, ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
       if (result.ok && (typeof result.value.content === 'string' && result.value.content.length > 16_000)) return { ok: false as const, reason: '모험 응답 크기 제한을 초과했습니다.' };
       return result;
@@ -51,7 +99,7 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
       const response = await request(buildTurnMessages(session, '상태를 바꾸지 말고 첫 장면만 묘사하라.'), signal, []);
       if (signal?.aborted) return cancelled();
       if (!response.ok) { log?.({ event: 'model_error', turn: 0 }); return response; }
-      const parsed = parseTurnOutcome(response.value.content ?? '');
+      const parsed = parseTurnOutcome(normalizeOutcome(response.value.content ?? ''));
       if (!parsed.ok) return parsed;
       onEvent?.({ kind: 'narrative', text: parsed.value.narrative });
       onEvent?.({ kind: 'state', state: session.state, applied: { stats: { health: 0, warmth: 0, focus: 0 }, added: [], removed: [], repaired: [], slept: false } });
@@ -89,7 +137,7 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
           messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
         }
       }
-      const parsed = parseTurnOutcome(content);
+      const parsed = parseTurnOutcome(normalizeOutcome(content));
       if (!parsed.ok) { onEvent?.({ kind: 'invalid', reason: parsed.reason }); log?.({ event: 'invalid', turn: session.turn + 1 }); return { ok: true, value: { ...session, turn: session.turn + 1 } }; }
       const { state, applied } = applyTurn(session.state, parsed.value);
       onEvent?.({ kind: 'narrative', text: parsed.value.narrative });

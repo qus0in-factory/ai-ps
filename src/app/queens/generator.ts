@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../../domain/chat.ts';
-import type { CompletionGateway } from '../../domain/completion.ts';
+import type { CompletionGateway, JsonSchemaResponseFormat } from '../../domain/completion.ts';
 import { validateDesign } from '../../domain/queens/design.ts';
 import type { GenerationListener, GenerationPath, QueensGenerator } from '../../domain/queens/generation.ts';
 import { createRandomSolution } from '../../domain/queens/random-solution.ts';
@@ -21,6 +21,21 @@ const MAX_MODEL_SEED_SOLVER_CALLS = 2000;
 const MAX_FALLBACK_RESTARTS = 500;
 const MAX_FALLBACK_SOLVER_CALLS = 4000;
 const TIMEOUT_REASON = '퍼즐 생성 제한 시간(290초)을 초과했습니다.';
+const PROPOSAL_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'queens_proposal',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        rows: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['rows'],
+      additionalProperties: false,
+    },
+  },
+};
 
 function systemPrompt(size: number): string {
   return [
@@ -55,7 +70,7 @@ async function propose(model: CompletionGateway, messages: ChatMessage[], signal
   try {
     if (signal.aborted) { cancel(); return await aborted; }
     return await Promise.race([model.complete(messages, {
-      response_format: { type: 'json_object' }, signal,
+      response_format: PROPOSAL_RESPONSE_FORMAT, signal,
     }), aborted]);
   } catch { return { ok: false as const, reason: '모델 요청 실패' }; }
   finally { signal.removeEventListener('abort', cancel); }

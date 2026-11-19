@@ -24,14 +24,23 @@ export function parseToolResponse(content: string): Result<ToolResponse> {
     if (data.type === 'message' && 'content' in data && typeof data.content === 'string' && data.content.trim()) {
       return { ok: true, value: { type: 'message', content: data.content, ...thought } };
     }
-    if (data.type === 'tool_call' && 'name' in data && typeof data.name === 'string' && data.name.trim() &&
-        'arguments' in data && data.arguments && typeof data.arguments === 'object' && !Array.isArray(data.arguments)) {
-      return { ok: true, value: {
-        type: 'tool_call', name: data.name, arguments: data.arguments as Record<string, unknown>, ...thought,
-      } };
+    const args = 'arguments' in data ? parseArguments(data.arguments) : undefined;
+    if (data.type === 'tool_call' && 'name' in data && typeof data.name === 'string' && data.name.trim() && args) {
+      return { ok: true, value: { type: 'tool_call', name: data.name, arguments: args, ...thought } };
     }
   }
   return { ok: false, reason: '모델의 JSON 응답 형식이 올바르지 않습니다. 다시 시도해주세요.' };
+}
+
+function parseArguments(value: unknown): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== 'string') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function toolCallKey(name: string, args: Record<string, unknown>): string {

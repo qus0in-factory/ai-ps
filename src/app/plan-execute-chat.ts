@@ -1,9 +1,56 @@
 import type { ChatGateway, ChatMessage, Result } from '../domain/chat.ts';
-import type { CompletionGateway } from '../domain/completion.ts';
+import type { CompletionGateway, JsonSchemaResponseFormat } from '../domain/completion.ts';
 import { parseExecutionPlan, type ExecutionPlan } from '../domain/execution-plan.ts';
 import { parseToolResponse, toolCallKey } from '../domain/tool-response.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
 import { createToolChat } from './tool-chat.ts';
+
+const PLAN_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'execution_plan',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['plan'] },
+        goal: { type: 'string' },
+        steps: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              title: { type: 'string' },
+              instruction: { type: 'string' },
+            },
+            required: ['id', 'title', 'instruction'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['type', 'goal', 'steps'],
+      additionalProperties: false,
+    },
+  },
+};
+
+const ANSWER_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'tool_chat_answer',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['message'] },
+        content: { type: 'string' },
+      },
+      required: ['type', 'content'],
+      additionalProperties: false,
+    },
+  },
+};
 
 export function createPlanExecuteChat(model: CompletionGateway, tools: Tool[], log?: ToolLogger): ChatGateway {
   const definitions = JSON.stringify(tools.map((tool) => tool.definition));
@@ -41,7 +88,9 @@ export function createPlanExecuteChat(model: CompletionGateway, tools: Tool[], l
         for (let attempt = 0; attempt < 2; attempt++) {
           turn++;
           log?.({ event: 'model_request', turn, phase });
-          const response = await boundedModel.complete(conversation, { response_format: { type: 'json_object' } });
+          const response = await boundedModel.complete(conversation, {
+            response_format: phase === 'planning' ? PLAN_RESPONSE_FORMAT : ANSWER_RESPONSE_FORMAT,
+          });
           if (!response.ok) {
             log?.({ event: 'model_error', turn, reason: response.reason, phase });
             return response;

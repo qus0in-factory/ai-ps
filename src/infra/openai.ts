@@ -4,9 +4,10 @@ import type { ToolDefinition } from '../domain/tools.ts';
 import { fetchWithRetry, isRetryableStatus } from './http-client.ts';
 
 export const DEFAULT_FALLBACK_MODEL = 'gpt-6.1-terra';
+const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
 
 function isRetryableCompletionFailure(reason: string, signal?: AbortSignal): boolean {
-  if (signal?.aborted || reason === '모델 API 키가 설정되지 않았습니다.') return false;
+  if (signal?.aborted || reason === '모델 API 키가 설정되지 않았습니다.' || reason === INVALID_RESPONSE_FORMAT_REASON) return false;
   const status = Number(reason.match(/\(HTTP (\d+)\)/)?.[1]);
   return Number.isFinite(status) ? isRetryableStatus(status) : true;
 }
@@ -42,6 +43,10 @@ export async function completion(
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   let signal: AbortSignal | undefined;
   try {
+    const responseFormat = params.response_format as { type?: unknown; json_schema?: { strict?: unknown } } | undefined;
+    if (responseFormat && (responseFormat.type !== 'json_schema' || responseFormat.json_schema?.strict !== true)) {
+      return { ok: false, reason: INVALID_RESPONSE_FORMAT_REASON };
+    }
     if (!apiKey?.trim()) {
       return { ok: false, reason: '모델 API 키가 설정되지 않았습니다.' };
     }

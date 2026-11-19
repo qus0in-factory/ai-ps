@@ -25,10 +25,19 @@ export interface CompletionGateway {
   complete(messages: ChatMessage[], options?: CompletionOptions): Promise<Result<AssistantMessage>>;
 }
 
+export interface JsonSchemaResponseFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    strict: true;
+    schema: Record<string, unknown>;
+  };
+}
+
 export interface CompletionOptions {
   reasoning_effort?: 'none';
   max_completion_tokens?: number;
-  response_format?: { type: 'json_object' };
+  response_format?: JsonSchemaResponseFormat;
   temperature?: number;
   tool_choice?: { type: 'function'; function: { name: string } };
   parallel_tool_calls?: boolean;
