@@ -1,4 +1,5 @@
-import pino, { type DestinationStream, type LoggerOptions } from 'pino';
+import pino, { type DestinationStream, type LogFn, type LoggerOptions } from 'pino';
+import { redactFields } from '../domain/redact.ts';
 
 export function createLogger({
   level = process.env.LOG_LEVEL ?? 'info',
@@ -9,6 +10,11 @@ export function createLogger({
     level,
     base: undefined,
     timestamp: pino.stdTimeFunctions.isoTime,
+    hooks: {
+      logMethod(args, method) {
+        method.apply(this, args.map(arg => redactFields(arg)) as Parameters<LogFn>);
+      },
+    },
   };
   if (destination) return pino(options, destination);
   if (!pretty) return pino(options);

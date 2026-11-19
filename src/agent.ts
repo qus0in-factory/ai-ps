@@ -18,11 +18,11 @@ const gateway = createGateway(createOpenAICompletion({
   client: openai,
   model: process.env.OPENAI_MODEL,
   fallbackModel: process.env.OPENAI_FALLBACK_MODEL,
-}), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger));
+}), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger, { full: true }));
 const result = await gateway.complete([
   { role: 'user', content: process.argv.slice(2).join(' ') || '안녕하세요!' },
 ]);
-if (result.ok) logger.info({ event: 'answer', content: result.value }, '답변 완료');
+if (result.ok) logger.info({ event: 'answer', chars: result.value.length }, '답변 완료');
 else {
   logger.error({ event: 'request_error', reason: result.reason }, '요청 실패');
   process.exitCode = 1;

@@ -31,7 +31,7 @@ describe('Given a Workers console logger', () => {
     const values = entries.map(entry => entry.value as Record<string, unknown>);
     assert.equal(values[0]!.event, 'model_request');
     assert.equal(values[0]!.turn, 1);
-    assert.equal(values[2]!.reason, 'timeout');
+    assert.equal('reason' in values[2]!, false); // 자유 문장 reason은 기본 요약에 없다
     assert.equal(values[3]!.component, 'queens');
     assert.equal(values[3]!.kind, 'complete');
     for (const value of values) {
@@ -50,6 +50,16 @@ describe('Given a Workers console logger', () => {
     const muted = capture('silent');
     createQueensLogger(muted.logger)({ kind: 'stopped', reason: 'cancelled' });
     assert.equal(muted.entries.length, 0);
+  });
+
+  it('When a log field contains an email Then the console line is masked and the input is unchanged', () => {
+    const { logger, entries } = capture();
+    const fields = { event: 'note', email: 'ada@example.com' };
+    logger.info(fields, '안내');
+    const value = entries[0]!.value as { email: string; msg: string };
+    assert.equal(value.email, '[EMAIL]');
+    assert.equal(value.msg, '안내');
+    assert.equal(fields.email, 'ada@example.com');
   });
 
   it('When LOG_LEVEL is invalid Then defaults to info without breaking request setup', () => {

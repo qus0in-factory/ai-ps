@@ -1,3 +1,5 @@
+import { redactFields } from '../domain/redact.ts';
+
 const levels: Record<string, number> = {
   trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60, silent: Infinity,
 };
@@ -10,11 +12,12 @@ export function createConsoleLogger({
   const write = (severity: 'info' | 'warn' | 'error') => (fields: unknown, ...args: unknown[]) => {
     if (levels[severity]! < threshold) return;
     const structured = fields !== null && typeof fields === 'object';
+    const msg = structured ? args[0] : fields;
     sink[severity]({
-      ...(structured ? fields : {}),
+      ...(structured ? redactFields(fields) as Record<string, unknown> : {}),
       level: levels[severity],
       time: new Date().toISOString(),
-      msg: structured ? args[0] : fields,
+      msg: redactFields(msg),
     });
   };
   return { info: write('info'), warn: write('warn'), error: write('error') };

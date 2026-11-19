@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
     talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
     }), log: talkLog },
-    reply: createReply(createGateway(model, tools, createToolLogger(logger)), createHistoryCompactor(model)),
+    reply: createReply(createGateway(model, tools, createToolLogger(logger, { full: true })), createHistoryCompactor(model)),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
   });
