@@ -14,6 +14,12 @@ describe('Given Wrangler deployment output', () => {
     assert.deepEqual(parseDeployment('\u001b[32mDeployed ai-ps\u001b[0m\n  https://ai-ps.qus0in.workers.dev\nCurrent Version ID: 12345678-abcd-1234-abcd-123456789abc'), {
       url: 'https://ai-ps.qus0in.workers.dev', versionId: '12345678-abcd-1234-abcd-123456789abc',
     });
+    assert.deepEqual(parseDeployment('Deployed ai-ps triggers\n  https://ai-ps.qus0in.workers.dev\n  aips.qus0in.dev (custom domain)\nCurrent Version ID: 12345678-abcd-1234-abcd-123456789abc'), {
+      url: 'https://ai-ps.qus0in.workers.dev', versionId: '12345678-abcd-1234-abcd-123456789abc',
+    });
+    assert.deepEqual(parseDeployment('Deployed ai-ps triggers\n  aips.qus0in.dev (custom domain)\nCurrent Version ID: 12345678-abcd-1234-abcd-123456789abc'), {
+      url: 'https://aips.qus0in.dev', versionId: '12345678-abcd-1234-abcd-123456789abc',
+    });
     assert.equal(parseDeployment('https://example.com\nVersion ID: none'), null);
     assert.equal(parseDeployment('https://ai-ps.test.workers.dev.evil.example\nCurrent Version ID: 12345678-abcd-1234-abcd-123456789abc'), null);
   });

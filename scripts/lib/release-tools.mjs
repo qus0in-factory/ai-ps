@@ -30,7 +30,9 @@ export function filterAppSecrets(text) {
 
 export function parseDeployment(output) {
   const plain = stripVTControlCharacters(output);
-  const url = plain.match(/(?:^|\s)(https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev)(?=\s|$)/im)?.[1];
+  const workersUrl = plain.match(/(?:^|\s)(https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev)(?=\s|$)/im)?.[1];
+  const customHost = plain.match(/^\s*([a-z0-9-]+(?:\.[a-z0-9-]+)+)\s+\(custom domain\b/im)?.[1];
+  const url = workersUrl ?? (customHost ? `https://${customHost}` : undefined);
   const versionId = plain.match(/(?:Current )?Version ID:\s*([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})\b/i)?.[1];
   return url && versionId ? { url, versionId } : null;
 }
