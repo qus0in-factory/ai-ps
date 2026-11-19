@@ -7,6 +7,27 @@ import type { KvJsonCache } from './kv-cache.ts';
 interface CachedSearch { hits: ResearchSearchResult[] }
 interface CachedPage { url: string; title: string; content: string }
 
+const SHORT_TTL_SECONDS = 5 * 60;
+
+function isSearchCache(value: unknown): value is CachedSearch {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const hits = (value as { hits?: unknown }).hits;
+  if (!Array.isArray(hits)) return false;
+  return hits.every(hit =>
+    !!hit && typeof hit === 'object' && !Array.isArray(hit)
+    && typeof (hit as { title?: unknown }).title === 'string'
+    && typeof (hit as { url?: unknown }).url === 'string'
+    && typeof (hit as { description?: unknown }).description === 'string');
+}
+
+function isPageCache(value: unknown): value is CachedPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as { url?: unknown; title?: unknown; content?: unknown };
+  return typeof candidate.url === 'string'
+    && typeof candidate.title === 'string'
+    && typeof candidate.content === 'string';
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -26,22 +47,28 @@ export function createCachedSearch(provider: ResearchSearchProvider, cache: KvJs
     async search(query, max, external) {
       const count = normalizeMax(max);
       const key = await sha256Hex(`${normalizeQuery(query)}:${count}`);
-      const cached = await cache.get<CachedSearch>(key);
-      if (cached?.hits?.length) {
+      const cached = await cache.get<unknown>(key);
+      if (isSearchCache(cached) && cached.hits.length >= 1) {
         return { ok: true, value: cached.hits };
       }
       const result = await provider.search(query, count, external);
       if (result.ok && result.value.length >= 1) {
-        await cache.put(key, { hits: result.value });
+        const full = result.value.length >= count;
+        await cache.put(key, { hits: result.value }, full ? undefined : SHORT_TTL_SECONDS);
       }
       return result;
     },
   };
 }
 
+export interface CachedReaderOptions {
+  allowedHosts?: ReadonlySet<string>;
+}
+
 export function createCachedReader(
   reader: { read(input: string, external?: AbortSignal): Promise<ResearchAdapterResult<ResearchWebpage>> },
   cache: KvJsonCache,
+  options: CachedReaderOptions = {},
 ): { read(input: string, external?: AbortSignal): Promise<ResearchAdapterResult<ResearchWebpage>> } {
   return {
     async read(input, external) {
@@ -54,9 +81,19 @@ export function createCachedReader(
         // Keep the original string as the cache key for invalid URLs.
       }
       const key = await sha256Hex(normalized);
-      const cached = await cache.get<CachedPage>(key);
-      if (cached) {
-        return { ok: true, value: { url: cached.url, title: cached.title, content: cached.content } };
+      const cached = await cache.get<unknown>(key);
+      if (isPageCache(cached)) {
+        let allowed = true;
+        if (options.allowedHosts) {
+          try {
+            allowed = options.allowedHosts.has(new URL(cached.url).hostname);
+          } catch {
+            allowed = false;
+          }
+        }
+        if (allowed) {
+          return { ok: true, value: { url: cached.url, title: cached.title, content: cached.content } };
+        }
       }
       const result = await reader.read(input, external);
       if (result.ok) {

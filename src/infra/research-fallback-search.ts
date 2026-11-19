@@ -18,10 +18,11 @@ export function createPrimaryFallbackSearch(
   fallback: ResearchSearchProvider,
   options: PrimaryFallbackSearchOptions = {},
 ): ResearchSearchProvider {
-  const minHits = options.minHits ?? 2;
+  const configuredMinHits = options.minHits ?? 2;
   return {
     async search(query, max, external) {
       const count = normalizeMax(max);
+      const minHits = Math.min(configuredMinHits, count);
       if (!hasKorean(query)) {
         return fallback.search(query, count, external);
       }

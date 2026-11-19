@@ -6,8 +6,8 @@ export interface KVNamespace {
 
 export interface KvJsonCache {
   get<T = unknown>(key: string): Promise<T | null>;
-  put(key: string, value: unknown): Promise<void>;
-  set(key: string, value: unknown): Promise<void>;
+  put(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
+  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
 }
 
 export function createKvJsonCache(
@@ -26,16 +26,17 @@ export function createKvJsonCache(
         return null;
       }
     },
-    async put(key: string, value: unknown): Promise<void> {
+    async put(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
       if (!kv) return;
+      const effectiveTtl = ttlSeconds && ttlSeconds > 0 ? ttlSeconds : ttl;
       try {
-        await kv.put(prefix + key, JSON.stringify(value), ttl > 0 ? { expirationTtl: ttl } : undefined);
+        await kv.put(prefix + key, JSON.stringify(value), effectiveTtl > 0 ? { expirationTtl: effectiveTtl } : undefined);
       } catch {
         // KV write failures are ignored; research is cheap.
       }
     },
-    async set(key: string, value: unknown): Promise<void> {
-      await this.put(key, value);
+    async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+      await this.put(key, value, ttlSeconds);
     },
   };
 }

@@ -93,7 +93,7 @@ export function createResearchEndpoint(
       const readerCache = createKvJsonCache(env.RESEARCH_CACHE, { prefix: 'rp/v1/', ttlSeconds: 24 * 60 * 60 });
       const search = createCachedSearch(baseSearch, searchCache);
       const allowedHosts = new Set<string>();
-      const reader = createCachedReader(createResearchWebReader({ allowedHosts, allowIpLiterals: false }), readerCache);
+      const reader = createCachedReader(createResearchWebReader({ allowedHosts, allowIpLiterals: false }), readerCache, { allowedHosts });
       return createResearchAgent({
         model: { complete: (messages, tools, settings) => model.complete(messages, tools, { ...settings, signal }) },
         search: async (query, max) => {
