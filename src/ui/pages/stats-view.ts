@@ -15,6 +15,11 @@ export function errorRate(calls: number, errors: number): string {
   return calls === 0 ? '0%' : `${Number(((errors / calls) * 100).toFixed(1))}%`;
 }
 
+/** 캐시 적中률: 입력 토큰 중 프롬프트 캐시가 적중한 비율(§16). */
+export function cacheHitRate(inputTokens: number, cachedTokens: number): string {
+  return inputTokens === 0 ? '0%' : `${Number(((cachedTokens / inputTokens) * 100).toFixed(1))}%`;
+}
+
 export function formatUsd(value: number): string {
   if (value === 0) return '$0.00';
   return value < 1 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;

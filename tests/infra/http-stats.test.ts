@@ -5,7 +5,7 @@ import type { StatsClient } from '../../src/ui/pages/stats-view.ts';
 
 const stats = {
   days: 7,
-  totals: { calls: 3, errors: 1, costUsd: 0.0123 },
+  totals: { calls: 3, errors: 1, costUsd: 0.0123, inputTokens: 10_000, cachedTokens: 2_500 },
   byService: [{ service: 'openai' as const, calls: 3, errors: 1, avgMs: 420.5, costUsd: 0.0123 }],
   byDay: [{ day: '2026-11-19', service: 'openai' as const, calls: 3, costUsd: 0.0123 }],
 };

@@ -28,10 +28,11 @@ interface UsageRow {
   ms: number;
   inputTokens: number | null;
   outputTokens: number | null;
+  cachedTokens: number | null;
   costUsd: number;
 }
 
-const INSERT = 'INSERT INTO usage_events (ts, route, service, op, model, status, ms, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+const INSERT = 'INSERT INTO usage_events (ts, route, service, op, model, status, ms, input_tokens, output_tokens, cached_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 function requestUrl(input: RequestInfo | URL): string {
   return typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -52,7 +53,7 @@ function formModel(body: BodyInit | null | undefined): string | null {
 }
 
 async function responseUsage(response: Response, op: UsageOp, requestBody: BodyInit | null | undefined) {
-  const usage = { model: op === 'transcribe' ? formModel(requestBody) : null, inputTokens: null as number | null, outputTokens: null as number | null };
+  const usage = { model: op === 'transcribe' ? formModel(requestBody) : null, inputTokens: null as number | null, outputTokens: null as number | null, cachedTokens: null as number | null };
   if (!response.ok) return usage;
   try {
     const body: unknown = await response.clone().json();
@@ -60,9 +61,18 @@ async function responseUsage(response: Response, op: UsageOp, requestBody: BodyI
     const data = body as { model?: unknown; usage?: unknown };
     if (typeof data.model === 'string' && data.model.trim()) usage.model = data.model;
     if (data.usage && typeof data.usage === 'object' && !Array.isArray(data.usage)) {
-      const tokens = data.usage as { prompt_tokens?: unknown; completion_tokens?: unknown };
+      const tokens = data.usage as {
+        prompt_tokens?: unknown; completion_tokens?: unknown;
+        prompt_tokens_details?: unknown; input_tokens_details?: unknown;
+      };
       if (typeof tokens.prompt_tokens === 'number' && Number.isFinite(tokens.prompt_tokens)) usage.inputTokens = tokens.prompt_tokens;
       if (typeof tokens.completion_tokens === 'number' && Number.isFinite(tokens.completion_tokens)) usage.outputTokens = tokens.completion_tokens;
+      // 캐시 적중 토큰(§16): completion은 prompt_tokens_details, 그 외는 input_tokens_details에 온다.
+      for (const details of [tokens.prompt_tokens_details, tokens.input_tokens_details]) {
+        const cached = details && typeof details === 'object' && !Array.isArray(details)
+          ? (details as { cached_tokens?: unknown }).cached_tokens : undefined;
+        if (typeof cached === 'number' && Number.isFinite(cached)) { usage.cachedTokens = cached; break; }
+      }
     }
   } catch {
     // The caller still owns the original response; a non-JSON body has no usage.
@@ -99,6 +109,7 @@ export function createUsageRecorder(options: {
       ms: Math.max(0, Math.round(event.ms)),
       inputTokens: event.inputTokens ?? null,
       outputTokens: event.outputTokens ?? null,
+      cachedTokens: event.cachedTokens ?? null,
       costUsd: costUsd(event),
     };
     events.push(row);
@@ -112,7 +123,7 @@ export function createUsageRecorder(options: {
         const op = operation(service, url);
         try {
           const response = await globalThis.fetch(input, init);
-          const usage = service === 'openai' ? await responseUsage(response, op, init?.body) : { model: null, inputTokens: null, outputTokens: null };
+          const usage = service === 'openai' ? await responseUsage(response, op, init?.body) : { model: null, inputTokens: null, outputTokens: null, cachedTokens: null };
           add({ service, op, ...usage, status: response.status, ms: now() - started });
           return response;
         } catch (error) {
@@ -129,7 +140,7 @@ export function createUsageRecorder(options: {
       const rows = events.splice(0);
       await db.batch(rows.map(row => db.prepare(INSERT).bind(
         row.ts, row.route, row.service, row.op, row.model, row.status, row.ms,
-        row.inputTokens, row.outputTokens, row.costUsd,
+        row.inputTokens, row.outputTokens, row.cachedTokens, row.costUsd,
       )));
     },
   };

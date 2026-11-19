@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { dailyCosts, errorRate, formatMs, formatUsd, serviceLabel } from '../../../../src/ui/pages/stats-view.ts';
+import { cacheHitRate, dailyCosts, errorRate, formatMs, formatUsd, serviceLabel } from '../../../../src/ui/pages/stats-view.ts';
 import type { UsageStats } from '../../../../src/domain/usage.ts';
 
 const stats: UsageStats = {
   days: 3,
-  totals: { calls: 5, errors: 1, costUsd: 0.03 },
+  totals: { calls: 5, errors: 1, costUsd: 0.03, inputTokens: 4_000, cachedTokens: 1_000 },
   byService: [],
   byDay: [
     { day: '2026-11-17', service: 'openai', calls: 2, costUsd: 0.01 },
@@ -33,5 +33,12 @@ describe('Given stats view helpers', () => {
     assert.equal(serviceLabel('ncp'), 'NAVER');
     assert.equal(serviceLabel('openai'), 'OpenAI');
     assert.equal(serviceLabel('brave'), 'Brave');
+  });
+
+  it('When formatting the cache hit rate Then divides cached tokens by input tokens', () => {
+    assert.equal(cacheHitRate(0, 0), '0%');
+    assert.equal(cacheHitRate(10_000, 2_500), '25%');
+    assert.equal(cacheHitRate(1_000, 333), '33.3%');
+    assert.equal(cacheHitRate(1_000, 1_000), '100%');
   });
 });

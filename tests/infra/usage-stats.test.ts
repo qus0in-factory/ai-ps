@@ -7,14 +7,14 @@ import type { UsageDatabase, UsagePreparedStatement } from '../../src/infra/usag
 const SCHEMA = `CREATE TABLE usage_events (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, route TEXT NOT NULL, service TEXT NOT NULL, op TEXT NOT NULL,
   model TEXT, status INTEGER NOT NULL, ms INTEGER NOT NULL, input_tokens INTEGER, output_tokens INTEGER,
-  cost_usd REAL NOT NULL DEFAULT 0)`;
+  cached_tokens INTEGER, cost_usd REAL NOT NULL DEFAULT 0)`;
 
 function openDb() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(SCHEMA);
   const sql: string[] = [];
   let batches = 0;
-  const insert = sqlite.prepare('INSERT INTO usage_events (ts, route, service, op, model, status, ms, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const insert = sqlite.prepare('INSERT INTO usage_events (ts, route, service, op, model, status, ms, input_tokens, output_tokens, cached_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   const db: UsageDatabase = {
     prepare(query: string): UsagePreparedStatement {
       return {
@@ -45,8 +45,8 @@ function openDb() {
     db,
     sql: () => sql,
     batches: () => batches,
-    add(ts: number, service: string, status: number, ms: number, cost: number, route = '/api/research') {
-      insert.run(ts, route, service, 'search', null, status, ms, null, null, cost);
+    add(ts: number, service: string, status: number, ms: number, cost: number, route = '/api/research', inputTokens: number | null = null, cachedTokens: number | null = null) {
+      insert.run(ts, route, service, 'search', null, status, ms, inputTokens, null, cachedTokens, cost);
     },
   };
 }
@@ -71,7 +71,7 @@ describe('Given usage events in D1', () => {
     assert.equal(store.sql().length, 3);
     assert.equal(store.sql().filter(query => /group by/i.test(query)).length, 2);
     assert.equal(stats.days, 7);
-    assert.deepEqual(stats.totals, { calls: 5, errors: 3, costUsd: 3.25 });
+    assert.deepEqual(stats.totals, { calls: 5, errors: 3, costUsd: 3.25, inputTokens: 0, cachedTokens: 0 });
     assert.deepEqual(stats.byService, [
       { service: 'brave', calls: 1, errors: 1, avgMs: 40, costUsd: 0.25 },
       { service: 'openai', calls: 4, errors: 2, avgMs: 15, costUsd: 3 },
@@ -105,9 +105,17 @@ describe('Given usage events in D1', () => {
     assert.equal(Math.floor(now / day) * day, Date.UTC(2026, 10, 19));
   });
 
+  it('When rows carry tokens Then totals include input and cached token sums', async () => {
+    const store = openDb();
+    store.add(noon, 'openai', 200, 10, 1, '/api/chat', 1000, 600);
+    store.add(noon, 'openai', 500, 20, 0, '/api/chat', 3000, 1000);
+    const stats = await queryUsageStats(store.db, { days: 7, now: noon });
+    assert.deepEqual(stats.totals, { calls: 2, errors: 1, costUsd: 1, inputTokens: 4000, cachedTokens: 1600 });
+  });
+
   it('When D1 is missing Then returns zeros and does not query', async () => {
     const stats = await queryUsageStats(undefined, { days: 3, now: noon });
-    assert.deepEqual(stats, { days: 3, totals: { calls: 0, errors: 0, costUsd: 0 }, byService: [], byDay: [] });
+    assert.deepEqual(stats, { days: 3, totals: { calls: 0, errors: 0, costUsd: 0, inputTokens: 0, cachedTokens: 0 }, byService: [], byDay: [] });
   });
 
   it('When the batch reports failure Then the query rejects instead of looking empty', async () => {

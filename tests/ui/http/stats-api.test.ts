@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createStatsApi } from '../../../src/ui/http/stats-api.ts';
 import type { UsageStats } from '../../../src/domain/usage.ts';
 
-const empty = (days: number): UsageStats => ({ days, totals: { calls: 0, errors: 0, costUsd: 0 }, byService: [], byDay: [] });
+const empty = (days: number): UsageStats => ({ days, totals: { calls: 0, errors: 0, costUsd: 0, inputTokens: 0, cachedTokens: 0 }, byService: [], byDay: [] });
 const now = 1_763_510_400_000;
 
 function api(load: (days: number, now: number) => Promise<UsageStats> = async days => empty(days)) {

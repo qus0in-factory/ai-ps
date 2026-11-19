@@ -1,7 +1,7 @@
 import { A } from '@solidjs/router';
 import { For, Show, createResource } from 'solid-js';
 import type { UsageStats } from '../../domain/usage.ts';
-import { dailyCosts, errorRate, formatMs, formatUsd, serviceLabel, type StatsClient } from './stats-view.ts';
+import { cacheHitRate, dailyCosts, errorRate, formatMs, formatUsd, serviceLabel, type StatsClient } from './stats-view.ts';
 import './StatsPage.css';
 
 const CHART_W = 600;
@@ -57,6 +57,7 @@ export function StatsPage(props: { client: StatsClient }) {
               <dl class="stats-totals">
                 <div><dt>호출</dt><dd>{stats().totals.calls.toLocaleString('ko-KR')}</dd></div>
                 <div><dt>오류율</dt><dd>{errorRate(stats().totals.calls, stats().totals.errors)}</dd></div>
+                <div><dt>캐시 적중률</dt><dd>{cacheHitRate(stats().totals.inputTokens, stats().totals.cachedTokens)}</dd></div>
                 <div><dt>비용</dt><dd>{formatUsd(stats().totals.costUsd)}</dd></div>
               </dl>
               <h2>서비스별</h2>

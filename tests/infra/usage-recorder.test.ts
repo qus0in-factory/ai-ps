@@ -46,8 +46,23 @@ describe('Given a usage recorder inside the retrying fetch', () => {
     assert.equal(batches(), 1);
     assert.equal(rows.length, 1);
     assert.deepEqual(rows[0]!.values, [
-      1_000, '/api/chat', 'openai', 'completion', 'gpt-6.1-terra-2026-10-26', 200, 0, 1_000_000, 200_000, 2,
+      1_000, '/api/chat', 'openai', 'completion', 'gpt-6.1-terra-2026-10-26', 200, 0, 1_000_000, 200_000, null, 2,
     ]);
+  });
+
+  it('When usage carries cached tokens Then records them from either details field', async t => {
+    const { db, rows } = fakeDb();
+    const recorder = createUsageRecorder({ db, route: '/api/chat', now: () => 1_500 });
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => Response.json(++calls === 1
+      ? { model: 'gpt-6.1-terra', usage: { prompt_tokens: 1_000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 600 } } }
+      : { model: 'gpt-6.1-terra', usage: { prompt_tokens: 1_000, completion_tokens: 100, input_tokens_details: { cached_tokens: 400 } } }));
+    const wrapped = recorder.wrap('openai');
+    await wrapped('https://api.openai.com/v1/chat/completions');
+    await wrapped('https://api.openai.com/v1/chat/completions');
+    await recorder.flush();
+    assert.deepEqual(rows.map(row => row.values[9]), [600, 400]);
+    assert.ok(Math.abs(rows[0]!.values[10] as number - 0.00093) < 1e-9); // (400×1 + 600×0.05 + 100×5)/1M
   });
 
   it('When a transcription succeeds Then uses the request FormData model and leaves missing usage null', async t => {
@@ -59,7 +74,7 @@ describe('Given a usage recorder inside the retrying fetch', () => {
     });
     await recorder.flush();
     assert.deepEqual(rows[0]!.values, [
-      2_000, '/api/talk/transcribe', 'openai', 'transcribe', 'gpt-transcribe', 200, 0, null, null, 0,
+      2_000, '/api/talk/transcribe', 'openai', 'transcribe', 'gpt-transcribe', 200, 0, null, null, null, 0,
     ]);
   });
 
@@ -99,7 +114,7 @@ describe('Given a usage recorder inside the retrying fetch', () => {
     await assert.rejects(() => recorder.wrap('openai')('https://api.openai.com/v1/chat/completions'), TypeError);
     await recorder.flush();
     assert.equal(rows[0]!.values[5], 0);
-    assert.equal(rows[0]!.values[9], 0);
+    assert.equal(rows[0]!.values[10], 0);
   });
 
   it('When there is no D1 binding Then wrap is a plain fetch no-op and flush resolves', async () => {
@@ -118,7 +133,7 @@ describe('Given a usage recorder inside the retrying fetch', () => {
     });
     await recorder.flush();
     assert.deepEqual(rows[0]!.values, [
-      6_000, '/api/talk/speech', 'openai', 'realtime', 'gpt-realtime-2.1-mini', 200, 250, 1_000_000, 1_000_000, 30,
+      6_000, '/api/talk/speech', 'openai', 'realtime', 'gpt-realtime-2.1-mini', 200, 250, 1_000_000, 1_000_000, null, 30,
     ]);
   });
 });

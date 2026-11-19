@@ -5,12 +5,13 @@ const DAY_MS = 86_400_000;
 const SERVICES = `'openai', 'brave', 'ncp'`;
 const WINDOW = `ts >= ? AND ts <= ? AND service IN (${SERVICES})`;
 const ERRORS = 'COALESCE(SUM(CASE WHEN status = 0 OR status >= 400 THEN 1 ELSE 0 END), 0)';
-const TOTALS = `SELECT COUNT(*) AS calls, ${ERRORS} AS errors, COALESCE(SUM(cost_usd), 0) AS costUsd FROM usage_events WHERE ${WINDOW}`;
+const TOKENS = 'COALESCE(SUM(input_tokens), 0) AS inputTokens, COALESCE(SUM(cached_tokens), 0) AS cachedTokens';
+const TOTALS = `SELECT COUNT(*) AS calls, ${ERRORS} AS errors, ${TOKENS}, COALESCE(SUM(cost_usd), 0) AS costUsd FROM usage_events WHERE ${WINDOW}`;
 const BY_SERVICE = `SELECT service, COUNT(*) AS calls, ${ERRORS} AS errors, COALESCE(AVG(ms), 0) AS avgMs, COALESCE(SUM(cost_usd), 0) AS costUsd FROM usage_events WHERE ${WINDOW} GROUP BY service ORDER BY service`;
 const BY_DAY = `SELECT date(ts / 1000, 'unixepoch') AS day, service, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS costUsd FROM usage_events WHERE ${WINDOW} GROUP BY date(ts / 1000, 'unixepoch'), service ORDER BY day, service`;
 
 function empty(days: number): UsageStats {
-  return { days, totals: { calls: 0, errors: 0, costUsd: 0 }, byService: [], byDay: [] };
+  return { days, totals: { calls: 0, errors: 0, costUsd: 0, inputTokens: 0, cachedTokens: 0 }, byService: [], byDay: [] };
 }
 
 function num(value: unknown): number {
@@ -56,7 +57,13 @@ export async function queryUsageStats(db: UsageDatabase | undefined, input: { da
   }
   return {
     days: input.days,
-    totals: { calls: num(total?.calls), errors: num(total?.errors), costUsd: num(total?.costUsd) },
+    totals: {
+      calls: num(total?.calls),
+      errors: num(total?.errors),
+      costUsd: num(total?.costUsd),
+      inputTokens: num(total?.inputTokens),
+      cachedTokens: num(total?.cachedTokens),
+    },
     byService,
     byDay,
   };

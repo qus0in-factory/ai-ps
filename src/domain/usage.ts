@@ -13,12 +13,14 @@ export interface UsageEvent {
   ms: number;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  /** 입력 토큰 중 프롬프트 캐시가 적중한 부분(§16). */
+  cachedTokens?: number | null;
 }
 
 /** `day`는 UTC `YYYY-MM-DD`. 데이터 없는 날·서비스는 생략(UI가 0으로 채운다). */
 export interface UsageStats {
   days: number;
-  totals: { calls: number; errors: number; costUsd: number };
+  totals: { calls: number; errors: number; costUsd: number; inputTokens: number; cachedTokens: number };
   byService: { service: UsageService; calls: number; errors: number; avgMs: number; costUsd: number }[];
   byDay: { day: string; service: UsageService; calls: number; costUsd: number }[];
 }
@@ -26,6 +28,8 @@ export interface UsageStats {
 export interface ModelPriceUsd {
   inputPerM: number;
   outputPerM: number;
+  /** 캐시 적중 입력 단가(§16). 없는 모델은 입력 단가로 폴백한다. */
+  cachedInputPerM?: number;
 }
 
 export interface SearchPriceUsd {
@@ -45,20 +49,22 @@ export const PRICES_USD: {
   search: Partial<Record<UsageService, SearchPriceUsd>>;
 } = {
   models: {
+    // cachedInputPerM은 실사용 모델(terra·luna)과 realtime 계열만 등록한다(§16).
+    // 미등록 모델(6.2·sol·astra·5.6 계열)의 캐시분은 입력 단가로 계산해 과대평가만 방지한다.
     'gpt-6.2-astra': { inputPerM: 8, outputPerM: 40 },
     'gpt-6.2-sol': { inputPerM: 2, outputPerM: 10 },
     'gpt-6-astra': { inputPerM: 10, outputPerM: 50 },
     'gpt-6.1-sol': { inputPerM: 2, outputPerM: 10 },
-    'gpt-6.1-terra': { inputPerM: 1, outputPerM: 5 },
-    'gpt-6-luna': { inputPerM: 0.1, outputPerM: 0.5 },
+    'gpt-6.1-terra': { inputPerM: 1, outputPerM: 5, cachedInputPerM: 0.05 },
+    'gpt-6-luna': { inputPerM: 0.1, outputPerM: 0.5, cachedInputPerM: 0.01 },
     'gpt-6-sol': { inputPerM: 2, outputPerM: 10 },
     'gpt-5.6-sol': { inputPerM: 4, outputPerM: 20 },
     'gpt-5.6-terra': { inputPerM: 2, outputPerM: 12 },
     'gpt-5.6-luna': { inputPerM: 0.2, outputPerM: 1.2 },
     'gpt-transcribe': { inputPerM: 0, outputPerM: 0 },
-    'gpt-realtime-2.1-mini': { inputPerM: 10, outputPerM: 20 },
-    'gpt-realtime-mini': { inputPerM: 10, outputPerM: 20 },
-    'gpt-realtime': { inputPerM: 32, outputPerM: 64 },
+    'gpt-realtime-2.1-mini': { inputPerM: 10, outputPerM: 20, cachedInputPerM: 0.3 },
+    'gpt-realtime-mini': { inputPerM: 10, outputPerM: 20, cachedInputPerM: 0.3 },
+    'gpt-realtime': { inputPerM: 32, outputPerM: 64, cachedInputPerM: 0.4 },
   },
   search: {
     brave: { perCall: 0.005 },
@@ -74,11 +80,16 @@ function modelPriceUsd(model: string): ModelPriceUsd | undefined {
   return match === null ? undefined : PRICES_USD.models[match];
 }
 
-/** 검색은 호출당, 모델 호출은 토큰 단가(모델명 최장 접두어 일치, 없으면 0). */
+/** 검색은 호출당, 모델 호출은 토큰 단가(모델명 최장 접두어 일치, 없으면 0).
+ * 캐시 적중분은 더 싼 캐시 입력 단가로, 캐시 단가가 없는 모델은 입력 단가로 계산한다(§16). */
 export function costUsd(event: UsageEvent): number {
   if (event.op === 'search') return PRICES_USD.search[event.service]?.perCall ?? 0;
   if (!event.model) return 0;
   const price = modelPriceUsd(event.model);
   if (!price) return 0;
-  return ((event.inputTokens ?? 0) / 1_000_000) * price.inputPerM + ((event.outputTokens ?? 0) / 1_000_000) * price.outputPerM;
+  const input = event.inputTokens ?? 0;
+  const cached = Math.min(event.cachedTokens ?? 0, input);
+  const cachedRate = price.cachedInputPerM ?? price.inputPerM;
+  return ((input - cached) / 1_000_000) * price.inputPerM + (cached / 1_000_000) * cachedRate
+    + ((event.outputTokens ?? 0) / 1_000_000) * price.outputPerM;
 }

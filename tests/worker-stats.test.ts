@@ -32,13 +32,13 @@ describe('Given the Workers stats route', () => {
     });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('Cache-Control'), 'max-age=60');
-    assert.deepEqual(await response.json(), { days: 7, totals: { calls: 0, errors: 0, costUsd: 0 }, byService: [], byDay: [] });
+    assert.deepEqual(await response.json(), { days: 7, totals: { calls: 0, errors: 0, costUsd: 0, inputTokens: 0, cachedTokens: 0 }, byService: [], byDay: [] });
     assert.equal(assetsCalled, 0);
   });
 
   it('When USAGE_DB returns grouped rows Then the response is that aggregate from one batch', async () => {
     const store = scripted([
-      [{ calls: 2, errors: 1, costUsd: 0.25 }],
+      [{ calls: 2, errors: 1, costUsd: 0.25, inputTokens: 5_000, cachedTokens: 2_500 }],
       [{ service: 'brave', calls: 2, errors: 1, avgMs: 12, costUsd: 0.25 }],
       [{ day: '2026-11-19', service: 'brave', calls: 2, costUsd: 0.25 }],
     ]);
@@ -47,7 +47,7 @@ describe('Given the Workers stats route', () => {
     assert.equal(store.batches(), 1);
     assert.deepEqual(await response.json(), {
       days: 1,
-      totals: { calls: 2, errors: 1, costUsd: 0.25 },
+      totals: { calls: 2, errors: 1, costUsd: 0.25, inputTokens: 5_000, cachedTokens: 2_500 },
       byService: [{ service: 'brave', calls: 2, errors: 1, avgMs: 12, costUsd: 0.25 }],
       byDay: [{ day: '2026-11-19', service: 'brave', calls: 2, costUsd: 0.25 }],
     });
