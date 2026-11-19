@@ -107,7 +107,12 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
     return progress('/api/chat', FALLBACK_ERROR_MESSAGE, c.req.raw.signal, async frame => {
       const result = await reply(body.value, wantsStream ? step => frame({ type: 'step', step }) : undefined);
       return result.ok
-        ? { ok: true, frame: { type: 'result', content: result.value }, json: wantsStream ? undefined : { content: result.value } }
+        ? {
+            ok: true,
+            // 압축이 일어났을 때만 전송용 컨텍스트를 실어 클라이언트가 다음 요청에 그대로 되돌려 보내게 한다.
+            frame: { type: 'result', content: result.value, ...(result.context ? { context: result.context } : {}) },
+            json: wantsStream ? undefined : { content: result.value, ...(result.context ? { context: result.context } : {}) },
+          }
         : { ok: false, status: result.status, detail: result.reason };
     });
   });

@@ -1,7 +1,10 @@
-import type { ChatGateway, Result } from '../domain/chat.ts';
+import type { ChatGateway, ChatMessage, Result } from '../domain/chat.ts';
+import { isConversation } from '../domain/chat.ts';
 import { isAgentStep, type StepListener } from '../domain/agent-step.ts';
 
-async function readProgress(response: Response, signal: AbortSignal, onStep?: StepListener): Promise<Result<string>> {
+async function readProgress(
+  response: Response, signal: AbortSignal, onStep?: StepListener, onContext?: (context: ChatMessage[]) => void,
+): Promise<Result<string>> {
   if (!response.body) return { ok: false, reason: '응답 스트림을 읽지 못했습니다.' };
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -14,6 +17,7 @@ async function readProgress(response: Response, signal: AbortSignal, onStep?: St
     const frame = JSON.parse(line);
     if (frame.type === 'step' && isAgentStep(frame.step)) onStep?.(frame.step);
     else if (frame.type === 'result' && typeof frame.content === 'string' && frame.content.trim()) {
+      if (isConversation(frame.context)) onContext?.(frame.context);
       result = { ok: true, value: frame.content };
     } else if (frame.type === 'problem') {
       result = { ok: false, reason: typeof frame.problem?.detail === 'string' ? frame.problem.detail : '요청을 처리하지 못했습니다.' };
@@ -45,9 +49,15 @@ async function readProgress(response: Response, signal: AbortSignal, onStep?: St
   }
 }
 
-export function createHttpChat(fetcher: typeof fetch = fetch, timeoutMs = 90_000): ChatGateway {
-  return {
+/** 최근 성공 응답이 압축 컨텍스트를 실었을 때만 정의된다(요청마다 다시 채워진다). */
+export interface ContextChatGateway extends ChatGateway {
+  lastContext?: ChatMessage[];
+}
+
+export function createHttpChat(fetcher: typeof fetch = fetch, timeoutMs = 90_000): ContextChatGateway {
+  const gateway: ContextChatGateway = {
     async complete(messages, onStep) {
+      gateway.lastContext = undefined;
       const signal = AbortSignal.timeout(timeoutMs);
       try {
         const response = await fetcher('/api/chat', {
@@ -60,13 +70,14 @@ export function createHttpChat(fetcher: typeof fetch = fetch, timeoutMs = 90_000
           signal,
         });
         const mediaType = response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase();
-        if (response.ok && mediaType === 'application/x-ndjson') return await readProgress(response, signal, onStep);
+        if (response.ok && mediaType === 'application/x-ndjson') return await readProgress(response, signal, onStep, context => { gateway.lastContext = context; });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
           const detail = mediaType === 'application/problem+json' && typeof data?.detail === 'string' ? data.detail : '';
           const title = mediaType === 'application/problem+json' && typeof data?.title === 'string' ? data.title : '';
           return { ok: false, reason: detail || title || `응답을 가져오지 못했습니다. (HTTP ${response.status})` };
         }
+        if (isConversation(data?.context)) gateway.lastContext = data.context;
         if (typeof data?.content !== 'string' || !data.content) {
           return { ok: false, reason: '응답이 비어 있습니다. 다시 시도해주세요.' };
         }
@@ -77,4 +88,5 @@ export function createHttpChat(fetcher: typeof fetch = fetch, timeoutMs = 90_000
       }
     },
   };
+  return gateway;
 }

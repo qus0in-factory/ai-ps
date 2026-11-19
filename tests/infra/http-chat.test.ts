@@ -74,3 +74,30 @@ describe('Given streaming agent progress', () => {
     assert.deepEqual(await chat.complete(messages), { ok: false, reason: '반복 호출을 중단했습니다.' });
   });
 });
+
+describe('Given a compacted reply context', () => {
+  it('When the final frame or JSON body carries a context Then exposes it as lastContext', async () => {
+    const context = [{ role: 'user', content: '[이전 대화 요약]\n요약' }, { role: 'assistant', content: '안녕하세요' }];
+    const streaming = createHttpChat(async () => new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'result', content: '답변', context }) + '\n')); },
+    }), { headers: { 'Content-Type': 'application/x-ndjson' } }));
+    assert.deepEqual(await streaming.complete(messages), { ok: true, value: '답변' });
+    assert.deepEqual(streaming.lastContext, context);
+
+    const json = createHttpChat(async () => Response.json({ content: '답변', context }));
+    assert.deepEqual(await json.complete(messages), { ok: true, value: '답변' });
+    assert.deepEqual(json.lastContext, context);
+  });
+
+  it('When a request carries no context Then clears the last one', async () => {
+    let call = 0;
+    const context = [{ role: 'user', content: '[이전 대화 요약]\n요약' }];
+    const chat = createHttpChat(async () => ++call === 1
+      ? Response.json({ content: '답변', context })
+      : Response.json({ content: '답변' }));
+    assert.deepEqual(await chat.complete(messages), { ok: true, value: '답변' });
+    assert.deepEqual(chat.lastContext, context);
+    assert.deepEqual(await chat.complete(messages), { ok: true, value: '답변' });
+    assert.equal(chat.lastContext, undefined);
+  });
+});
