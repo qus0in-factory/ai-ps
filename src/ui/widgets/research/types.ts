@@ -1,7 +1,7 @@
 import type { Result } from '../../../domain/chat.ts';
-import type { ResearchResult, ResearchStep, ResearchTool } from '../../../domain/research/types.ts';
+import type { ResearchEvaluation, ResearchResult, ResearchStep, ResearchTool } from '../../../domain/research/types.ts';
 
-export type { ResearchResult, ResearchStep, ResearchTool };
+export type { ResearchEvaluation, ResearchResult, ResearchStep, ResearchTool };
 
 export interface ResearchClient {
   run(topic: string, signal?: AbortSignal): Promise<Result<ResearchResult>>;

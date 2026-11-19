@@ -8,12 +8,18 @@ export interface ResearchStep {
   ok: boolean;
 }
 
+export interface ResearchEvaluation {
+  passed: boolean;
+  problems: string[];
+}
+
 export interface ResearchResult {
   report: string;
   steps: ResearchStep[];
   sources: string[];
   iterations: number;
   capped: boolean;
+  evaluation?: ResearchEvaluation;
 }
 
 export interface ResearchClient {
@@ -52,8 +58,21 @@ function isStep(value: unknown): value is ResearchStep {
   return args.length <= 10 && args.every((arg) => typeof arg === 'string' || typeof arg === 'number' || typeof arg === 'boolean');
 }
 
+function isEvaluation(value: unknown): value is ResearchEvaluation {
+  if (!record(value) || !only(value, ['passed', 'problems'])) return false;
+  return typeof value.passed === 'boolean'
+    && Array.isArray(value.problems)
+    && value.problems.length <= 20
+    && value.problems.every((item) => typeof item === 'string' && item.length <= ERROR_MAX);
+}
+
 function isResearchResult(value: unknown): value is ResearchResult {
-  if (!record(value) || !only(value, ['report', 'steps', 'sources', 'iterations', 'capped'])) return false;
+  if (!record(value)) return false;
+  const keys = Object.keys(value);
+  const baseKeys = ['report', 'steps', 'sources', 'iterations', 'capped'];
+  const allowedKeys = [...baseKeys, 'evaluation'];
+  if (!baseKeys.every((key) => keys.includes(key)) || !keys.every((key) => allowedKeys.includes(key))) return false;
+  if (value.evaluation !== undefined && !isEvaluation(value.evaluation)) return false;
   return text(value.report, REPORT_MAX)
     && Array.isArray(value.steps) && value.steps.length <= STEPS_MAX && value.steps.every(isStep)
     && Array.isArray(value.sources) && value.sources.length <= SOURCES_MAX

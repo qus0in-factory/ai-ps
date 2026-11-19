@@ -18,7 +18,8 @@ export type ResearchLogEvent =
   | { event: 'tool_call'; turn: number; name: string }
   | { event: 'tool_result'; turn: number; name: string; ok: boolean }
   | { event: 'wrap_up' }
-  | { event: 'report' };
+  | { event: 'report' }
+  | { event: 'evaluate' };
 
 export type ResearchLogger = (entry: ResearchLogEvent) => void;
 

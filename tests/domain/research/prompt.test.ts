@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildEvaluationMessages,
   buildReportMessages,
+  EVALUATOR_FORMAT,
+  parseEvaluation,
   RESEARCH_SYSTEM_PROMPT,
   WRAP_UP_MESSAGE,
 } from '../../../src/domain/research/prompt.ts';
@@ -47,5 +50,43 @@ describe('Given the /research agent works in an autonomous tool loop', () => {
   it('When the notes are blank Then the report prompt says so instead of an empty block', () => {
     const content = buildReportMessages('토픽', '   ').at(0)?.content ?? '';
     assert.ok(content.includes('(조사 노트가 비어 있습니다.)'));
+  });
+
+  it('When building rewrite report messages with evaluator problems Then includes the problems to fix', () => {
+    const content = buildReportMessages('토픽', '노트', ['출처가 누락됨', '노트에 없는 수치 추가']).at(0)?.content ?? '';
+    assert.ok(content.includes('출처가 누락됨'));
+    assert.ok(content.includes('노트에 없는 수치 추가'));
+  });
+
+  it('When declaring EVALUATOR_FORMAT and building evaluation messages Then follows book 8.5 schema and criteria', () => {
+    assert.equal(EVALUATOR_FORMAT.type, 'json_schema');
+    assert.equal(EVALUATOR_FORMAT.json_schema.name, 'evaluation');
+    assert.equal(EVALUATOR_FORMAT.json_schema.strict, true);
+    assert.deepEqual(EVALUATOR_FORMAT.json_schema.schema.required, ['passed', 'problems']);
+    assert.equal(EVALUATOR_FORMAT.json_schema.schema.additionalProperties, false);
+
+    const messages = buildEvaluationMessages('노트: 사실 A (https://example.com)', '## 개요\n사실 A');
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.role, 'user');
+    const content = messages[0]?.content ?? '';
+    assert.ok(content.includes('보고서의 모든 주장이 조사 노트에 근거하는가?'));
+    assert.ok(content.includes('조사 노트에 없는 사실이 추가되지 않았는가?'));
+    assert.ok(content.includes('출처 표기가 조사 노트의 출처와 일치하는가?'));
+    assert.ok(content.includes('노트: 사실 A'));
+    assert.ok(content.includes('## 개요\n사실 A'));
+  });
+
+  it('When parsing evaluator output Then validates passed and problems', () => {
+    assert.deepEqual(parseEvaluation('{"passed":true,"problems":[]}'), {
+      ok: true,
+      value: { passed: true, problems: [] },
+    });
+    assert.deepEqual(parseEvaluation('{"passed":false,"problems":[" 출처 불일치 ",""]}'), {
+      ok: true,
+      value: { passed: false, problems: ['출처 불일치'] },
+    });
+    for (const invalid of ['not json', '{}', '{"passed":"yes","problems":[]}', '{"passed":false,"problems":[123]}']) {
+      assert.equal(parseEvaluation(invalid).ok, false);
+    }
   });
 });

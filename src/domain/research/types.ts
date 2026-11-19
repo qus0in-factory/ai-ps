@@ -6,10 +6,16 @@ export interface ResearchStep {
   ok: boolean;
 }
 
+export interface ResearchEvaluation {
+  passed: boolean;
+  problems: string[];
+}
+
 export interface ResearchResult {
   report: string;
   steps: ResearchStep[];
   sources: string[];
   iterations: number;
   capped: boolean;
+  evaluation?: ResearchEvaluation;
 }

@@ -63,8 +63,9 @@ export function createResearchEndpoint(
         return { ok: false, reason: '리서치 공급자 설정이 필요합니다.' };
       }
       const signal = AbortSignal.any([external, AbortSignal.timeout(540_000)]);
-      const model = createOpenAICompletion({ model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL, apiKey: env.OPENAI_API_KEY,
-        baseUrl: env.OPENAI_BASE_URL, logErrors: false, strictTools: false });
+      const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL });
+      const model = createOpenAICompletion({ client: openai, model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL,
+        logErrors: false, strictTools: false });
       const search = createMergedResearchSearch([
         ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY })] : []),
         ...(hasNcp ? [createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY })] : []),

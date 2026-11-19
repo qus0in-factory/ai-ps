@@ -11,10 +11,17 @@ import {
   truncateWebpage,
   type SearchHit,
 } from '../../domain/research/tools.ts';
-import { buildReportMessages, RESEARCH_SYSTEM_PROMPT, WRAP_UP_MESSAGE } from '../../domain/research/prompt.ts';
+import {
+  buildEvaluationMessages,
+  buildReportMessages,
+  EVALUATOR_FORMAT,
+  parseEvaluation,
+  RESEARCH_SYSTEM_PROMPT,
+  WRAP_UP_MESSAGE,
+} from '../../domain/research/prompt.ts';
 import { validateTopic } from '../../domain/research/topic.ts';
 import { extractSources } from '../../domain/research/sources.ts';
-import type { ResearchResult, ResearchStep } from '../../domain/research/types.ts';
+import type { ResearchEvaluation, ResearchResult, ResearchStep } from '../../domain/research/types.ts';
 import type { ResearchAgentPorts } from './ports.ts';
 
 export const RESEARCH_TOOL_DEFINITIONS: ToolDefinition[] = [SEARCH_WEB_TOOL, READ_WEBPAGE_TOOL];
@@ -49,7 +56,7 @@ export function createResearchAgent(ports: ResearchAgentPorts) {
           capped: loop.value.capped,
         } };
       }
-      const report = await writeReport(ports, checked.value, loop.value.notes);
+      let report = await writeReport(ports, checked.value, loop.value.notes);
       if (!report.ok) {
         return hits.length > 0
           ? { ok: true, value: {
@@ -61,12 +68,22 @@ export function createResearchAgent(ports: ResearchAgentPorts) {
           } }
           : report;
       }
+      let evaluation = await evaluateReport(ports, loop.value.notes, report.value);
+      if (evaluation.ok && !evaluation.value.passed) {
+        const rewritten = await writeReport(ports, checked.value, loop.value.notes, evaluation.value.problems);
+        if (rewritten.ok) {
+          report = rewritten;
+          const reevaluated = await evaluateReport(ports, loop.value.notes, report.value);
+          if (reevaluated.ok) evaluation = reevaluated;
+        }
+      }
       return { ok: true, value: {
         report: report.value,
         steps: loop.value.steps,
         sources: extractSources(loop.value.steps),
         iterations: loop.value.iterations,
         capped: loop.value.capped,
+        ...(evaluation.ok ? { evaluation: evaluation.value } : {}),
       } };
     },
   };
@@ -116,12 +133,24 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
 }
 
 /** 보고서 작성: 조사 노트만 근거로, tools 없이 온도 0.3으로 호출한다(조사와 작성 분리). */
-export async function writeReport(ports: ResearchAgentPorts, topic: string, notes: string): Promise<Result<string>> {
+export async function writeReport(ports: ResearchAgentPorts, topic: string, notes: string, problems?: readonly string[]): Promise<Result<string>> {
   ports.log?.({ event: 'report' });
-  const result = await ports.model.complete(buildReportMessages(topic, notes), [], { temperature: 0.3, reasoning_effort: 'none' });
+  const result = await ports.model.complete(buildReportMessages(topic, notes, problems), [], { temperature: 0.3, reasoning_effort: 'none' });
   if (!result.ok) return result;
   const content = (result.value.content ?? result.value.refusal ?? '').trim();
   return content ? { ok: true, value: content } : { ok: false, reason: '보고서 생성에 실패했습니다. 다시 시도해주세요.' };
+}
+
+/** 보고서 평가: 조사 노트 대비 보고서 충실도를 온도 0·json_schema(strict)로 판정한다(책 8.5). */
+export async function evaluateReport(ports: ResearchAgentPorts, notes: string, report: string): Promise<Result<ResearchEvaluation>> {
+  ports.log?.({ event: 'evaluate' });
+  const result = await ports.model.complete(buildEvaluationMessages(notes, report), [], {
+    temperature: 0,
+    reasoning_effort: 'none',
+    response_format: EVALUATOR_FORMAT,
+  });
+  if (!result.ok) return result;
+  return parseEvaluation(result.value.content ?? '');
 }
 
 interface ToolCallOutcome {

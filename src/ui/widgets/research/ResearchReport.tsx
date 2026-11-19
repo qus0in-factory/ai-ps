@@ -1,7 +1,7 @@
 import { For, Show } from 'solid-js';
 import { Markdown } from '../../components/markdown/Markdown.tsx';
 import type { ResearchResult } from './types.ts';
-import { runSummary, visibleSources } from './research-view.ts';
+import { evaluationSummary, runSummary, visibleSources } from './research-view.ts';
 
 export function ResearchReport(props: { result: ResearchResult }) {
   const sources = () => visibleSources(props.result.sources);
@@ -11,6 +11,19 @@ export function ResearchReport(props: { result: ResearchResult }) {
         <h2>보고서</h2>
         <span>{runSummary(props.result)}</span>
       </header>
+      <Show when={props.result.evaluation}>{evaluation => (
+        <div
+          class={`research-evaluation ${evaluation().passed ? 'research-evaluation--passed' : 'research-evaluation--failed'}`}
+          role="status"
+        >
+          <strong>{evaluationSummary(evaluation())}</strong>
+          <Show when={!evaluation().passed && evaluation().problems.length > 0}>
+            <ul>
+              <For each={evaluation().problems}>{problem => <li>{problem}</li>}</For>
+            </ul>
+          </Show>
+        </div>
+      )}</Show>
       <Show when={props.result.capped}>
         <p class="research-capped" role="status">반복 한도에 도달해 조사를 마무리했어요. 일부 내용은 출처를 직접 확인해 주세요.</p>
       </Show>

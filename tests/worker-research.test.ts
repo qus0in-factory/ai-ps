@@ -23,7 +23,9 @@ describe('Given the Workers research composition', () => {
             if (brave === 'ok') assert.match(toolText, /Brave result/);
             return Response.json({ choices: [{ message: { role: 'assistant', content: 'Search notes' } }] });
           }
-          return Response.json({ choices: [{ message: { role: 'assistant', content: '# Report' } }] });
+          if (models === 3) return Response.json({ choices: [{ message: { role: 'assistant', content: '# Report' } }] });
+          assert.equal(body.response_format?.json_schema?.name, 'evaluation');
+          return Response.json({ choices: [{ message: { role: 'assistant', content: '{"passed":true,"problems":[]}' } }] });
         }
         if (url.hostname === 'api.search.brave.com') {
           braveCalls++;
@@ -42,7 +44,7 @@ describe('Given the Workers research composition', () => {
       });
       const response = await worker.fetch(request(), { ...env(), BRAVE_SEARCH_API_KEY: brave === 'missing' ? undefined : 'private-brave', NCP_API_KEY_ID: 'private-ncp-id', NCP_API_KEY: 'private-ncp-key' });
       assert.equal(response.status, 200); const body = await response.json(); assert.equal(body.steps[0].ok, true);
-      assert.equal(models, 3); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : brave === 'failed' ? 4 : 1);
+      assert.equal(models, 4); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : brave === 'failed' ? 4 : 1);
     });
   }
   it('When the production quota binding is missing or fails Then refuses external work with a safe error', async t => {
@@ -99,8 +101,12 @@ describe('Given the Workers research composition', () => {
           assert.match(JSON.stringify(body.messages), /Public park facts/);
           return Response.json({ choices: [{ message: { role: 'assistant', content: '조사 노트: 공원. https://example.com/parks' } }] });
         }
-        assert.equal(body.temperature, 0.3); assert.equal(body.tools, undefined);
-        return Response.json({ choices: [{ message: { role: 'assistant', content: '# 보고서\n\n공원 [출처](https://example.com/parks)' } }] });
+        if (modelCalls === 4) {
+          assert.equal(body.temperature, 0.3); assert.equal(body.tools, undefined);
+          return Response.json({ choices: [{ message: { role: 'assistant', content: '# 보고서\n\n공원 [출처](https://example.com/parks)' } }] });
+        }
+        assert.equal(body.temperature, 0); assert.equal(body.response_format?.json_schema?.name, 'evaluation');
+        return Response.json({ choices: [{ message: { role: 'assistant', content: '{"passed":true,"problems":[]}' } }] });
       }
       if (url.hostname === 'api.search.brave.com') {
         searchCalls++; assert.equal(new Headers(init?.headers).get('X-Subscription-Token'), 'private-brave');
@@ -116,7 +122,8 @@ describe('Given the Workers research composition', () => {
     assert.equal(response.status, 200); const body = await response.json();
     assert.match(body.report, /보고서/); assert.deepEqual(body.steps.map((step: { tool: string; ok: boolean }) => [step.tool, step.ok]), [['search_web', true], ['read_webpage', true]]);
     assert.deepEqual(body.sources, ['https://example.com/parks']); assert.equal(body.capped, false);
-    assert.equal(modelCalls, 4); assert.equal(searchCalls, 1); assert.equal(pageCalls, 1); assert.equal(dnsCalls, 2);
+    assert.deepEqual(body.evaluation, { passed: true, problems: [] });
+    assert.equal(modelCalls, 5); assert.equal(searchCalls, 1); assert.equal(pageCalls, 1); assert.equal(dnsCalls, 2);
     const serialized = JSON.stringify(logs); assert.doesNotMatch(serialized, /도시|공원|private-|example\.com|parks|summary|facts|192\.0/);
     assert.equal(logs.length, 1);
     const fields = (logs[0] as [{ topicLength: number; toolCalls: number }])[0]; assert.equal(fields.topicLength, 5); assert.equal(fields.toolCalls, 2);

@@ -1,4 +1,4 @@
-import type { ResearchResult, ResearchStep } from './types.ts';
+import type { ResearchEvaluation, ResearchResult, ResearchStep } from './types.ts';
 import { RESEARCH_TOPIC_MAX } from './types.ts';
 
 const DETAIL_MAX = 120;
@@ -54,4 +54,11 @@ export function elapsedLabel(seconds: number): string {
   const minutes = Math.floor(safe / 60);
   const rest = safe % 60;
   return `조사 중 · ${minutes > 0 ? `${minutes}분 ${rest}초` : `${rest}초`} 경과`;
+}
+
+export function evaluationSummary(evaluation: ResearchEvaluation): string {
+  if (evaluation.passed) return '검증 통과 · 조사 노트 근거 확인';
+  return evaluation.problems.length > 0
+    ? `검증 미통과 · 보완 필요 ${evaluation.problems.length}건`
+    : '검증 미통과';
 }

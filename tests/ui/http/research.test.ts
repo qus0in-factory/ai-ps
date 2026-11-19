@@ -85,4 +85,13 @@ describe('Given the research HTTP client', () => {
     const client: UiResearchClient = createHttpResearch(async () => Response.json(report));
     assert.equal(typeof client.run, 'function');
   });
+
+  it('When the response includes an evaluation Then validates passed and problems', async () => {
+    const withEval = { ...report, evaluation: { passed: false, problems: ['출처 표기 불일치'] } };
+    const valid = await createHttpResearch(async () => Response.json(withEval)).run('주제');
+    assert.deepEqual(valid, { ok: true, value: withEval });
+
+    const invalidEval = { ...report, evaluation: { passed: 'yes', problems: [] } };
+    assert.equal((await createHttpResearch(async () => Response.json(invalidEval)).run('주제')).ok, false);
+  });
 });

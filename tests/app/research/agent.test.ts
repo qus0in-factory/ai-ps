@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createResearchAgent } from '../../../src/app/research/agent.ts';
 import type { ResearchLogEvent, ResearchPagePort, ResearchSearchPort } from '../../../src/app/research/ports.ts';
-import { RESEARCH_SYSTEM_PROMPT, WRAP_UP_MESSAGE } from '../../../src/domain/research/prompt.ts';
+import { EVALUATOR_FORMAT, RESEARCH_SYSTEM_PROMPT, WRAP_UP_MESSAGE } from '../../../src/domain/research/prompt.ts';
 import type { AssistantMessage, CompletionMessage, CompletionOptions, FunctionCompletionGateway } from '../../../src/domain/completion.ts';
 import type { ToolDefinition } from '../../../src/domain/tools.ts';
 import type { Result } from '../../../src/domain/chat.ts';
@@ -55,17 +55,23 @@ const emptySearch: ResearchSearchPort = async () => ({ ok: true, value: [] });
 const emptyRead: ResearchPagePort = async () => ({ ok: true, value: '본문' });
 
 describe('Given the research agent with a scripted model and fake tools', () => {
-  it('When the model answers without tool calls Then the run ends with notes and a separate report call', async () => {
+  it('When the model answers without tool calls Then the run ends with notes, a report call, and an evaluation call', async () => {
     const { model, calls } = fakeModel([
       { ok: true, value: text('조사 노트: 확인한 사실 (https://example.com/a)') },
       { ok: true, value: text('## 개요\n보고서 본문') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
     ]);
     const tools = fakeTools();
     const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('  엣지 컴퓨팅  ');
     assert.deepEqual(outcome, { ok: true, value: {
-      report: '## 개요\n보고서 본문', steps: [], sources: [], iterations: 1, capped: false,
+      report: '## 개요\n보고서 본문',
+      steps: [],
+      sources: [],
+      iterations: 1,
+      capped: false,
+      evaluation: { passed: true, problems: [] },
     } });
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     const research = calls[0]!;
     assert.deepEqual(research.tools.map((tool) => tool.name).sort(), ['read_webpage', 'search_web']);
     assert.deepEqual(research.options, { temperature: 0.2, reasoning_effort: 'none' });
@@ -79,6 +85,9 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     const reportContent = String(report.messages[0]?.content);
     assert.ok(reportContent.includes('조사 노트: 확인한 사실'));
     assert.ok(reportContent.includes('"엣지 컴퓨팅"'));
+    const evaluation = calls[2]!;
+    assert.deepEqual(evaluation.tools, []);
+    assert.deepEqual(evaluation.options, { temperature: 0, reasoning_effort: 'none', response_format: EVALUATOR_FORMAT });
   });
 
   it('When one response carries several tool calls Then they execute in order and each result becomes a tool message', async () => {
@@ -121,6 +130,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       ] } },
       { ok: true, value: text('노트') },
       { ok: true, value: text('보고서') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
     ]);
     const tools = fakeTools({
       search: async (query) => query === 'q' ? { ok: false, reason: 'HTTP 429' } : { ok: true, value: [] },
@@ -138,7 +148,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       assert.equal(outcome.value.steps.length, 3);
       assert.equal(outcome.value.steps.filter((step) => step.ok).length, 1);
     }
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
   });
 
   it('When the agent keeps calling tools until the cap Then a tools-free wrap-up call closes the research', async () => {
@@ -148,6 +158,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     }
     script.push({ ok: true, value: text('마무리 노트') });
     script.push({ ok: true, value: text('최종 보고서') });
+    script.push({ ok: true, value: text('{"passed":true,"problems":[]}') });
     const { model, calls } = fakeModel(script);
     const events: ResearchLogEvent[] = [];
     const outcome = await createResearchAgent({
@@ -161,7 +172,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       assert.deepEqual(outcome.value.sources, []);
       assert.equal(outcome.value.report, '최종 보고서');
     }
-    assert.equal(calls.length, 12);
+    assert.equal(calls.length, 13);
     for (let index = 0; index < 10; index++) assert.equal(calls[index]!.tools.length, 2);
     const wrapUp = calls[10]!;
     assert.deepEqual(wrapUp.tools, []);
@@ -210,5 +221,40 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       if (!outcome.ok) assert.match(outcome.reason, /1~200자/);
     }
     assert.equal(calls.length, 0);
+  });
+
+  it('When the evaluator fails the first draft Then rewrites the report at most once with the problems and re-evaluates', async () => {
+    const { model, calls } = fakeModel([
+      { ok: true, value: text('조사 노트: 사실 A (https://example.com/a)') },
+      { ok: true, value: text('## 개요\n초안 보고서 (출처 누락)') },
+      { ok: true, value: text('{"passed":false,"problems":["출처 표기가 누락되었습니다."]}') },
+      { ok: true, value: text('## 개요\n수정된 보고서 (https://example.com/a)') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
+    ]);
+    const outcome = await createResearchAgent({ model, search: emptySearch, read: emptyRead }).run('엣지 컴퓨팅');
+    assert.equal(outcome.ok, true);
+    if (outcome.ok) {
+      assert.equal(outcome.value.report, '## 개요\n수정된 보고서 (https://example.com/a)');
+      assert.deepEqual(outcome.value.evaluation, { passed: true, problems: [] });
+    }
+    assert.equal(calls.length, 5);
+    assert.ok(String(calls[3]!.messages[0]?.content).includes('출처 표기가 누락되었습니다.'));
+  });
+
+  it('When the rewritten report still fails evaluation Then stops after one rewrite and returns the remaining problems', async () => {
+    const { model, calls } = fakeModel([
+      { ok: true, value: text('조사 노트: 사실 A (https://example.com/a)') },
+      { ok: true, value: text('초안 보고서') },
+      { ok: true, value: text('{"passed":false,"problems":["첫 번째 문제"]}') },
+      { ok: true, value: text('재작성 보고서') },
+      { ok: true, value: text('{"passed":false,"problems":["여전히 남은 문제"]}') },
+    ]);
+    const outcome = await createResearchAgent({ model, search: emptySearch, read: emptyRead }).run('엣지 컴퓨팅');
+    assert.equal(outcome.ok, true);
+    if (outcome.ok) {
+      assert.equal(outcome.value.report, '재작성 보고서');
+      assert.deepEqual(outcome.value.evaluation, { passed: false, problems: ['여전히 남은 문제'] });
+    }
+    assert.equal(calls.length, 5);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { elapsedLabel, runSummary, stepDetail, stepOutcome, stepTitle, topicProblem, visibleSources } from '../../../../src/ui/widgets/research/research-view.ts';
+import { elapsedLabel, evaluationSummary, runSummary, stepDetail, stepOutcome, stepTitle, topicProblem, visibleSources } from '../../../../src/ui/widgets/research/research-view.ts';
 import type { ResearchStep } from '../../../../src/ui/widgets/research/types.ts';
 
 const search: ResearchStep = { tool: 'search_web', args: { query: '국내 전기차 보조금' }, ok: true };
@@ -66,5 +66,9 @@ describe('Given a finished research run', () => {
     assert.match(elapsedLabel(5), /5초/);
     assert.match(elapsedLabel(65), /1분 5초/);
     assert.match(elapsedLabel(-1), /0초/);
+  });
+  it('When evaluation is present Then formats passed and failed feedback summaries', () => {
+    assert.match(evaluationSummary({ passed: true, problems: [] }), /통과/);
+    assert.match(evaluationSummary({ passed: false, problems: ['출처 누락', '근거 부족'] }), /2건/);
   });
 });
