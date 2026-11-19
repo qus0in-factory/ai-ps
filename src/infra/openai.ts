@@ -8,17 +8,26 @@ const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const OPENAI_TIMEOUTS = { completion: 60_000, transcription: 30_000, speech: 30_000 } as const;
 const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
 
+export interface OpenAIUsageRecord {
+  op: 'realtime';
+  model?: string | null;
+  status: number;
+  ms: number;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
+
 export interface OpenAIClient {
   apiKey?: string;
   baseUrl: string;
   fetcher: typeof fetch;
   timeouts: typeof OPENAI_TIMEOUTS;
   url(path: string): string;
+  record?: (event: OpenAIUsageRecord) => void;
 }
 
 /** One place for the OpenAI base URL, key, timeouts and retrying fetch. */
 export function createOpenAIClient(config: {
-  apiKey?: string; baseUrl?: string; fetcher?: typeof fetch;
+  apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; record?: (event: OpenAIUsageRecord) => void;
 } = {}): OpenAIClient {
   const baseUrl = (config.baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
   return {
@@ -27,6 +36,7 @@ export function createOpenAIClient(config: {
     fetcher: config.fetcher ?? fetchWithRetry,
     timeouts: OPENAI_TIMEOUTS,
     url: path => `${baseUrl}${path}`,
+    record: config.record,
   };
 }
 

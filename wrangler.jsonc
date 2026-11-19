@@ -18,5 +18,8 @@
   ],
   "r2_buckets": [
     { "binding": "TALK_AUDIO", "bucket_name": "ai-ps-talk-audio" }
+  ],
+  "d1_databases": [
+    { "binding": "USAGE_DB", "database_name": "ai-ps-usage", "migrations_dir": "migrations" }
   ]
 }

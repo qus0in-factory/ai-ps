@@ -13,12 +13,12 @@ class FakeSocket extends EventTarget implements RealtimeSocket {
   close() { this.closes++; this.readyState = 3; }
   accept() { this.accepts++; }
   receive(value: unknown) { this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) })); }
-  complete(transcript = 'こんにちは。') {
+  complete(transcript = 'こんにちは。', usage?: Record<string, unknown>) {
     this.receive({ type: 'response.output_audio.delta', delta: btoa('\x00\x80') });
     this.receive({ type: 'response.output_audio.delta', delta: btoa('\xff\x7f') });
     this.receive({ type: 'response.output_audio.done' });
     this.receive({ type: 'response.output_audio_transcript.done', transcript });
-    this.receive({ type: 'response.done', response: { status: 'completed' } });
+    this.receive({ type: 'response.done', response: { status: 'completed', ...(usage ? { usage } : {}) } });
   }
 }
 function scripted(run: (socket: FakeSocket) => void) {
@@ -54,8 +54,7 @@ describe('Given a server-side Realtime Japanese speaker', () => {
     assert.deepEqual(socket.sent[1]!.item.content, [{ type: 'input_text', text: 'こんにちは。' }]);
     assert.equal(socket.accepts, 1); assert.equal(socket.closes, 1);
   });
-  it('When a shared client is supplied Then uses its base URL and key without retrying the socket', async () => {
-    const socket = scripted(s => s.complete());
+  it('When a shared client is supplied Then uses its base URL and key without retrying the socket', async () => {    const socket = scripted(s => s.complete());
     const client = createOpenAIClient({ apiKey: 'shared-key', baseUrl: 'https://shared.test/v1/' });
     const speaker = createRealtimeSpeaker({ client, model: 'shared-realtime', connect: async (url, headers) => {
       assert.equal(url, 'wss://shared.test/v1/realtime?model=shared-realtime');
@@ -64,6 +63,18 @@ describe('Given a server-side Realtime Japanese speaker', () => {
     } });
     assert.equal((await speaker.speak('こんにちは。')).ok, true);
     assert.equal(socket.accepts, 1);
+  });
+  it('When the response completes Then reports one realtime usage event to the client recorder', async () => {
+    const records: unknown[] = [];
+    const socket = scripted(s => s.complete('こんにちは。', { input_tokens: 12, output_tokens: 34 }));
+    const client = createOpenAIClient({ apiKey: 'key', record: event => records.push(event) });
+    const result = await createRealtimeSpeaker({ client, model: 'gpt-realtime-2.1-mini', connect: async () => socket }).speak('こんにちは。');
+    assert.equal(result.ok, true);
+    assert.equal(records.length, 1);
+    assert.deepEqual({ ...(records[0] as object), ms: 0 }, {
+      op: 'realtime', model: 'gpt-realtime-2.1-mini', status: 200, ms: 0,
+      usage: { input_tokens: 12, output_tokens: 34 },
+    });
   });
   it('When using the default Workers connection Then upgrades with header auth and accepts the socket', async t => {
     const socket = scripted(s => s.complete());

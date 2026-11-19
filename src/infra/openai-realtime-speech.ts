@@ -42,10 +42,12 @@ export function createRealtimeSpeaker(config: {
         return { ok: false, reason: `음성 입력은 1~${MAX_TTS_TEXT_LENGTH}자여야 합니다.` };
       }
       if (!client.apiKey?.trim()) return { ok: false, reason: '음성 생성 API 키가 설정되지 않았습니다.' };
+      const requestStartedAt = Date.now();
+      const model = config.model?.trim() || 'gpt-realtime-2.1-mini';
       const timeout = AbortSignal.timeout(client.timeouts.speech);
       const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
       const baseUrl = client.baseUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-      const url = `${baseUrl}/realtime?model=${encodeURIComponent(config.model?.trim() || 'gpt-realtime-2.1-mini')}`;
+      const url = `${baseUrl}/realtime?model=${encodeURIComponent(model)}`;
 
       return new Promise<Result<AudioClip>>(resolve => {
         let socket: RealtimeSocket | undefined;
@@ -110,6 +112,7 @@ export function createRealtimeSpeaker(config: {
               transcriptLength = (transcriptLength ?? 0) + [...data.transcript].length;
             } else if (requested && data.type === 'response.done') {
               if (data.response?.status !== 'completed' || !byteLength || byteLength % 2) return fail();
+              client.record?.({ op: 'realtime', model, status: 200, ms: Date.now() - requestStartedAt, usage: data.response.usage });
               const pcm = new Uint8Array(byteLength);
               let offset = 0;
               for (const chunk of chunks) { pcm.set(chunk, offset); offset += chunk.length; }

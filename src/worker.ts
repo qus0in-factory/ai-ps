@@ -14,6 +14,8 @@ import { createToolLogger } from './infra/tool-logger.ts';
 import { createQueensLogger } from './infra/queens-logger.ts';
 import { createConsoleLogger } from './infra/console-logger.ts';
 import { createOpenAIClient, createOpenAICompletion } from './infra/openai.ts';
+import { createHttpClient } from './infra/http-client.ts';
+import { createUsageRecorder, type UsageDatabase, type UsageRecorder } from './infra/usage-recorder.ts';
 import { createApi } from './ui/http/api.ts';
 import { createTutor } from './app/talk/tutor.ts';
 import { createOpenAITranscriber } from './infra/openai-transcribe.ts';
@@ -48,11 +50,16 @@ export interface Env extends TalkRateLimitBindings {
   NCP_API_KEY_ID?: string;
   NCP_API_KEY?: string;
   RESEARCH_LIMIT?: ResearchRateLimitBinding;
+  USAGE_DB?: UsageDatabase;
+}
+
+interface WorkerContext {
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 export function createResearchEndpoint(
   env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_FALLBACK_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT'>,
-  options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void } = {},
+  options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void; recorder?: UsageRecorder } = {},
 ) {
   return createResearchApi({
     limit: createResearchRateLimit(env.RESEARCH_LIMIT, { required: options.requireLimitBinding }), log: options.log,
@@ -63,12 +70,14 @@ export function createResearchEndpoint(
         return { ok: false, reason: '리서치 공급자 설정이 필요합니다.' };
       }
       const signal = AbortSignal.any([external, AbortSignal.timeout(540_000)]);
-      const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL });
+      const retrying = (service: 'openai' | 'brave' | 'ncp') => options.recorder
+        ? createHttpClient({ fetcher: options.recorder.wrap(service) }) : undefined;
+      const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, fetcher: retrying('openai') });
       const model = createOpenAICompletion({ client: openai, model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL,
         logErrors: false, strictTools: false });
       const search = createMergedResearchSearch([
-        ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY })] : []),
-        ...(hasNcp ? [createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY })] : []),
+        ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY, fetcher: retrying('brave') })] : []),
+        ...(hasNcp ? [createNcpSearch({ apiKeyId: env.NCP_API_KEY_ID, apiKey: env.NCP_API_KEY, fetcher: retrying('ncp') })] : []),
       ]);
       const allowedHosts = new Set<string>();
       const reader = createResearchWebReader({ allowedHosts, allowIpLiterals: false });
@@ -90,18 +99,34 @@ export function createResearchEndpoint(
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: WorkerContext): Promise<Response> {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     const logger = createConsoleLogger({ level: env.LOG_LEVEL });
-    if (getPath(request) === '/api/research') return createResearchEndpoint(env, {
-      requireLimitBinding: true, log: metrics => logger.info(metrics),
-    }).fetch(request);
+    const recorder = createUsageRecorder({ db: env.USAGE_DB, route: getPath(request), now: Date.now });
+    const flushNow = () => recorder.flush().catch(() => logger.warn({ event: 'usage_flush_error' }));
+    const flushUsage = () => {
+      const pending = flushNow();
+      if (ctx) ctx.waitUntil(pending);
+      else return pending;
+    };
+    if (getPath(request) === '/api/research') {
+      const response = await createResearchEndpoint(env, {
+        requireLimitBinding: true, log: metrics => logger.info(metrics), recorder,
+      }).fetch(request);
+      await flushUsage();
+      return response;
+    }
     const talkLog = createTalkLogger(logger);
     const limited = await limitTalkRequest(request, env, talkLog);
-    if (limited) return limited;
+    if (limited) { await flushUsage(); return limited; }
     const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
       : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
-    const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL });
+    const openaiFetcher = createHttpClient({ fetcher: recorder.wrap('openai') });
+    const openai = createOpenAIClient({ apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, fetcher: openaiFetcher,
+      record: event => recorder.record({
+        service: 'openai', op: event.op, model: event.model, status: event.status, ms: event.ms,
+        inputTokens: event.usage?.input_tokens ?? null, outputTokens: event.usage?.output_tokens ?? null,
+      }) });
     const modelConfig = {
       client: openai, model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL,
     };
@@ -114,7 +139,7 @@ export default {
       createR2AudioCache(env.TALK_AUDIO, { warn: entry => logger.warn(entry) }), {
         model: speech.model, voice: speech.voice, promptVersion: REALTIME_SPEECH_PROMPT_VERSION, warn: entry => logger.warn(entry),
       });
-    return createApi({
+    const response = await createApi({
       talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
         client: openai, model: env.OPENAI_TRANSCRIBE_MODEL,
       }), log: talkLog },
@@ -122,5 +147,23 @@ export default {
       adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
     }).fetch(request);
+    const body = response.body;
+    if (!body || !response.headers.get('Content-Type')?.includes('application/x-ndjson')) {
+      await flushUsage();
+      return response;
+    }
+    const reader = body.getReader();
+    return new Response(new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (!done) { controller.enqueue(value); return; }
+        await flushNow();
+        controller.close();
+      },
+      async cancel(reason) {
+        await reader.cancel(reason);
+        await flushNow();
+      },
+    }), { status: response.status, headers: response.headers });
   },
 };
