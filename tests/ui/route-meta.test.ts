@@ -18,7 +18,7 @@ function fakeDocument(): MetaDocument & { tags: Record<string, { content: string
 
 describe('Given the route meta table', () => {
   it('When looking up a route Then returns its title and tolerates a trailing slash', () => {
-    assert.equal(metaFor('/stats').title, '사용량 · 에이전트 문제 해결');
+    assert.equal(metaFor('/stats').title, 'Stats · 에이전트 문제 해결');
     assert.equal(metaFor('/chat/').title, 'Chat · 에이전트 문제 해결');
     assert.equal(metaFor('/').title, '에이전트 문제 해결');
   });

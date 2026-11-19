@@ -14,7 +14,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   '/adventure': { title: `Adventure · ${SITE}`, description: '「잿빛 등대」 텍스트 어드벤처.' },
   '/talk': { title: `Talk · ${SITE}`, description: '일본어 회화 연습 튜터.' },
   '/research': { title: `Research · ${SITE}`, description: '검색과 웹 읽기로 주제를 조사해 보고서를 쓰는 자동 리서치 에이전트.' },
-  '/stats': { title: `사용량 · ${SITE}`, description: '외부 API 호출·오류·비용 통계.' },
+  '/stats': { title: `Stats · ${SITE}`, description: '외부 API 호출·오류·비용 통계.' },
 };
 
 export function metaFor(pathname: string): RouteMeta {

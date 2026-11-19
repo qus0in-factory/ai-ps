@@ -38,7 +38,7 @@ export function StatsPage(props: { client: StatsClient }) {
   return (
     <main class="stats-page">
       <header class="stats-header">
-        <h1>사용량</h1>
+        <h1>Stats</h1>
         <A href="/" class="stats-home">홈</A>
       </header>
       <Show when={!outcome.loading} fallback={<p role="status">불러오는 중…</p>}>
@@ -46,7 +46,7 @@ export function StatsPage(props: { client: StatsClient }) {
           when={outcome()?.ok ? (outcome() as { ok: true; value: UsageStats }).value : undefined}
           fallback={(
             <div role="alert" class="stats-error">
-              <p>{(outcome() as { ok: false; reason: string } | undefined)?.reason ?? '사용량 통계를 불러오지 못했습니다.'}</p>
+              <p>{(outcome() as { ok: false; reason: string } | undefined)?.reason ?? 'Stats 통계를 불러오지 못했습니다.'}</p>
               <button type="button" onClick={() => void refetch()}>다시 시도</button>
             </div>
           )}
