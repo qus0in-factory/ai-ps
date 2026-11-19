@@ -20,6 +20,6 @@
     { "binding": "TALK_AUDIO", "bucket_name": "ai-ps-talk-audio" }
   ],
   "d1_databases": [
-    { "binding": "USAGE_DB", "database_name": "ai-ps-usage", "migrations_dir": "migrations" }
+    { "binding": "USAGE_DB", "database_name": "ai-ps-usage", "database_id": "4089c2b1-f53a-4536-a869-dc2915761b64", "migrations_dir": "migrations" }
   ]
 }
