@@ -132,7 +132,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 - 정규화는 NFC로 통일하고 공백(전각 공백 포함)을 정리하는 수준으로 고정한다. 문장부호 표기 차이(전각 `！`/반각 `!` 등)는 다른 키로 남는다. `domain/talk/expressions.ts`의 고정 표현 중 실제 연결된 것은 인사(`greeting`)·되묻기(`repeat`) 두 개뿐이고, `morning`·`evening`·`encourage`는 아직 쓰이지 않는 예비 상수다.
 - TTS 입력은 §2의 1~200자 상한(`MAX_TTS_TEXT_LENGTH`)을 그대로 적용하고, 저장 전 WAV 바이트도 상한(2 MB)을 둔다. STT는 개인 발화라 캐시하지 않는다.
 - 캐시 읽기 실패(예외·`ok:false`)에는 합성을 건너뛰고 실패한다. 장애 중 유료 합성을 막기 위한 코드 정책이다. 쓰기 실패는 경고만 남기고 생성한 오디오를 그대로 반환한다.
-- R2 버킷에는 30일 미접근 객체 삭제(수명 규칙)를 건다. 유니크 텍스트마다 객체가 늘어나므로 만료가 없으면 저장량이 계속 커진다.
+- R2 버킷에는 업로드 후 30일 경과 객체 삭제(R2 lifecycle `expire-tts`, prefix `tts/`)를 건다. 유니크 텍스트마다 객체가 늘어나므로 만료가 없으면 저장량이 계속 커진다.
 
 ## 6. 녹음·STT
 
@@ -190,7 +190,7 @@ export interface TalkClient extends Transcriber, Tutor, Speaker, Reporter {}   /
 | 1 | **Realtime WS 인증 방식**(Workers `fetch`+`Upgrade`에 `Authorization` 헤더 vs 하위 프로토콜 인증)과 **이벤트 이름**(세대별로 `response.audio.delta`/`response.output_audio.delta` 등이 다름) | 3단계 시작 시 `scripts/`에 1회용 프로브(키는 `--env-file`)로 확인 후 상수 확정. `connect` 주입으로 코드 변경 범위를 1파일로 묶는다 |
 | 2 | Realtime 모델이 텍스트를 읽지 않고 **대답**할 수 있음 | 고정 `instructions` + transcript 길이 비교 `warn`. 빈도가 높으면 "Read aloud: …" 접두어 실험 |
 | 3 | gpt-6-luna의 `temperature` | 확인됨: 1 이외 값 거부. 보내지 않는다 |
-| 4 | **남용**: 공개 URL, 턴당 비용 3종 | 코드 상한 + Workers Rate Limiting(speech·transcribe IP당 분당 10회, turn·report 20회) 적용. R2에는 30일 미접근 만료 규칙 |
+| 4 | **남용**: 공개 URL, 턴당 비용 3종 | 코드 상한 + Workers Rate Limiting(speech·transcribe IP당 분당 10회, turn·report 20회) 적용. R2에는 업로드 후 30일 경과 객체 삭제(R2 lifecycle `expire-tts`, prefix `tts/`) |
 | 5 | Safari `MediaRecorder`는 `audio/mp4`(AAC)만 지원 | 허용 목록에 포함, `gpt-transcribe`가 m4a/mp4를 받는지 2단계 스모크로 확인 |
 | 6 | 자동 재생 정책 | 녹음 버튼 클릭이 사용자 제스처라 보통 허용. 실패 시 "다시 듣기"로 복구 |
 | 7 | 음성 선택(`coral` 등 Realtime 음성 목록) | 기본 `coral`, 환경 변수로 교체 |
