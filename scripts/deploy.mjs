@@ -6,6 +6,7 @@ import { filterAppSecrets, parseDeployment, staleSecretNames } from './lib/relea
 import { ROOT, STORE, command, noLocalStore, fail, cli, parseOptions } from './lib/command.mjs';
 
 const RESEARCH_SECRET_KEYS = ['BRAVE_SEARCH_API_KEY', 'NCP_API_KEY_ID', 'NCP_API_KEY'];
+const EXTRA_DEPLOY_SECRET_KEYS = ['OPENAI_FALLBACK_MODEL', ...RESEARCH_SECRET_KEYS];
 
 export function mapResearchSecretNames(text) {
   const env = parseEnv(text);
@@ -21,9 +22,14 @@ export function mapResearchSecretNames(text) {
 }
 
 export function filterDeploySecrets(text) {
+  const env = parseEnv(text);
   const mapped = mapResearchSecretNames(text);
   // NAVER API HUB search was verified with HTTP 200; upload its application keys.
-  return { ...filterAppSecrets(text), ...Object.fromEntries(RESEARCH_SECRET_KEYS.filter(key => mapped[key]).map(key => [key, mapped[key]])) };
+  return {
+    ...filterAppSecrets(text),
+    ...(env.OPENAI_FALLBACK_MODEL?.trim() ? { OPENAI_FALLBACK_MODEL: env.OPENAI_FALLBACK_MODEL } : {}),
+    ...Object.fromEntries(RESEARCH_SECRET_KEYS.filter(key => mapped[key]).map(key => [key, mapped[key]])),
+  };
 }
 
 export async function deploy(args, { cwd = ROOT, execute = command, print = console.log } = {}) {
@@ -75,7 +81,7 @@ export async function deploy(args, { cwd = ROOT, execute = command, print = cons
       if (remoteSecrets !== null) {
         const stale = staleSecretNames(remoteSecrets, secrets);
         const remote = JSON.parse(remoteSecrets);
-        stale.push(...RESEARCH_SECRET_KEYS.filter(key => !secrets[key] && remote.some(item => item.name === key)));
+        stale.push(...EXTRA_DEPLOY_SECRET_KEYS.filter(key => !secrets[key] && remote.some(item => item.name === key)));
         if (stale.length) print(`WARN remote app secrets omitted from .env are preserved (not deleted): ${stale.join(', ')}`);
       }
       if (Object.keys(secrets).length) {

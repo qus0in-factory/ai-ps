@@ -1,3 +1,4 @@
+import { fetchWithRetry } from './http-client.ts';
 import { cancelResearchBody, readResearchBody, researchFailure, withResearchDeadline } from './research-http.ts';
 import type { ResearchAdapterResult } from './research-http.ts';
 import { extractResearchHtml } from './research-html-extraction.ts';
@@ -66,7 +67,7 @@ export function createResearchWebReader(config: {
   fetcher?: typeof fetch; lookup?: ResearchDnsLookup; timeoutMs?: number;
   allowedHosts?: ReadonlySet<string>; allowIpLiterals?: boolean;
 } = {}) {
-  const fetcher = config.fetcher ?? fetch;
+  const fetcher = config.fetcher ?? fetchWithRetry;
   return {
     async read(input: string, external?: AbortSignal): Promise<ResearchAdapterResult<ResearchWebpage>> {
       try {

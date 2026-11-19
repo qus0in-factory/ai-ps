@@ -42,7 +42,7 @@ describe('Given the Workers research composition', () => {
       });
       const response = await worker.fetch(request(), { ...env(), BRAVE_SEARCH_API_KEY: brave === 'missing' ? undefined : 'private-brave', NCP_API_KEY_ID: 'private-ncp-id', NCP_API_KEY: 'private-ncp-key' });
       assert.equal(response.status, 200); const body = await response.json(); assert.equal(body.steps[0].ok, true);
-      assert.equal(models, 3); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : 1);
+      assert.equal(models, 3); assert.equal(ncpCalls, 3); assert.equal(braveCalls, brave === 'missing' ? 0 : brave === 'failed' ? 4 : 1);
     });
   }
   it('When the production quota binding is missing or fails Then refuses external work with a safe error', async t => {

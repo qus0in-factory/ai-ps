@@ -3,7 +3,7 @@ export type ResearchAdapterResult<T> = { ok: true; value: T } | { ok: false; rea
 export const MAX_RESEARCH_RESPONSE_BYTES = 1024 * 1024;
 
 export async function withResearchDeadline<T>(milliseconds: number | undefined, work: (signal: AbortSignal) => Promise<T>, external?: AbortSignal): Promise<T> {
-  const duration = Number.isFinite(milliseconds) ? Math.min(30_000, Math.max(1, milliseconds!)) : 10_000;
+  const duration = Number.isFinite(milliseconds) ? Math.min(30_000, Math.max(1, milliseconds!)) : 20_000;
   const controller = new AbortController();
   if (external?.aborted) throw new DOMException('Research request cancelled', 'AbortError');
   let cancel: (() => void) | undefined;

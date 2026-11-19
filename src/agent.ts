@@ -15,6 +15,7 @@ const createGateway = process.env.OPENAI_TOOL_MODE === 'function' ? createFuncti
     : ['json', 'react'].includes(process.env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
 const gateway = createGateway(createOpenAICompletion({
   model: process.env.OPENAI_MODEL,
+  fallbackModel: process.env.OPENAI_FALLBACK_MODEL,
   apiKey: process.env.OPENAI_API_KEY,
   baseUrl: process.env.OPENAI_BASE_URL,
 }), createTools({ apiKey: process.env.OWM_API_KEY, queens: createQueensService() }), createToolLogger(logger));

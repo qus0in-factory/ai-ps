@@ -1,3 +1,4 @@
+import { fetchWithRetry } from './http-client.ts';
 import { cancelResearchBody, readResearchBody, researchFailure, withResearchDeadline } from './research-http.ts';
 import type { ResearchAdapterResult } from './research-http.ts';
 import type { ResearchSearchResult } from './research-brave-search.ts';
@@ -41,7 +42,7 @@ export function createNcpSearch(config: { apiKeyId?: string; apiKey?: string; fe
             url.searchParams.set('query', query.trim()); url.searchParams.set('display', String(count));
             url.searchParams.set('start', '1'); url.searchParams.set('format', 'json');
             // Workers rejects redirect: 'error'; manual keeps credentialed redirects blocked.
-            const response = await (config.fetcher ?? fetch)(url.href, { redirect: 'manual', signal, headers: {
+            const response = await (config.fetcher ?? fetchWithRetry)(url.href, { redirect: 'manual', signal, headers: {
               Accept: 'application/json', 'X-NCP-APIGW-API-KEY-ID': config.apiKeyId!, 'X-NCP-APIGW-API-KEY': config.apiKey!,
             } });
             // Error payloads can echo credentials; never read or log them.

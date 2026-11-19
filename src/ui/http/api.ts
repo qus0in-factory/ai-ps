@@ -23,6 +23,7 @@ type Outcome = { ok: true; frame: unknown; json?: unknown } | { ok: false; statu
 type Frame = (value: unknown) => void;
 
 const encoder = new TextEncoder();
+export const FALLBACK_ERROR_MESSAGE = '일시적으로 응답할 수 없습니다. 잠시 후 다시 시도해 주세요.';
 
 function problem(status: number, detail: string, instance: string, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(createProblem(status, detail, instance)), {
@@ -103,7 +104,7 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
     const body = await readJson(c.req.raw);
     if (!body.ok) return problem(400, '올바른 JSON 요청이 필요합니다.', '/api/chat');
     const wantsStream = c.req.header('Accept')?.includes('application/x-ndjson') ?? false;
-    return progress('/api/chat', '요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.', c.req.raw.signal, async frame => {
+    return progress('/api/chat', FALLBACK_ERROR_MESSAGE, c.req.raw.signal, async frame => {
       const result = await reply(body.value, wantsStream ? step => frame({ type: 'step', step }) : undefined);
       return result.ok
         ? { ok: true, frame: { type: 'result', content: result.value }, json: wantsStream ? undefined : { content: result.value } }
@@ -209,6 +210,6 @@ export function createApi({ reply, queens, adventure, talk }: ApiDependencies) {
   postOnly('/api/talk/report');
 
   api.notFound(c => problem(404, '요청한 API를 찾을 수 없습니다.', c.req.path));
-  api.onError((_error, c) => problem(500, '요청을 처리하지 못했습니다.', c.req.path));
+  api.onError((_error, c) => problem(500, FALLBACK_ERROR_MESSAGE, c.req.path));
   return api;
 }

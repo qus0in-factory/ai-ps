@@ -1,4 +1,5 @@
 import type { Transcriber } from '../domain/talk/transcription.ts';
+import { fetchWithRetry } from './http-client.ts';
 
 export function createOpenAITranscriber(config: {
   apiKey?: string; baseUrl?: string; model?: string; fetcher?: typeof fetch;
@@ -17,7 +18,7 @@ export function createOpenAITranscriber(config: {
         body.append('model', config.model?.trim() || 'gpt-transcribe');
         body.append('language', 'ja');
         const baseUrl = (config.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
-        const response = await (config.fetcher ?? fetch)(`${baseUrl}/audio/transcriptions`, {
+        const response = await (config.fetcher ?? fetchWithRetry)(`${baseUrl}/audio/transcriptions`, {
           method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body, signal: combined,
         });
         // Do not read or log provider error bodies: they can contain credentials or speech.

@@ -1,3 +1,4 @@
+import { fetchWithRetry } from './http-client.ts';
 import { cancelResearchBody, readResearchBody, researchFailure, withResearchDeadline } from './research-http.ts';
 import type { ResearchAdapterResult } from './research-http.ts';
 
@@ -15,7 +16,7 @@ export function createBraveSearch(config: { apiKey?: string; fetcher?: typeof fe
           url.searchParams.set('q', query.trim());
           url.searchParams.set('count', String(count));
           url.searchParams.set('text_decorations', 'false');
-          const response = await (config.fetcher ?? fetch)(url.href, {
+          const response = await (config.fetcher ?? fetchWithRetry)(url.href, {
             headers: { Accept: 'application/json', 'X-Subscription-Token': config.apiKey! },
             // Workers supports follow/manual; reject 3xx below without forwarding keys.
             redirect: 'manual', signal,

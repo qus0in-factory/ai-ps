@@ -9,6 +9,7 @@ import {
   READ_WEBPAGE_TOOL,
   SEARCH_WEB_TOOL,
   truncateWebpage,
+  type SearchHit,
 } from '../../domain/research/tools.ts';
 import { buildReportMessages, RESEARCH_SYSTEM_PROMPT, WRAP_UP_MESSAGE } from '../../domain/research/prompt.ts';
 import { validateTopic } from '../../domain/research/topic.ts';
@@ -23,6 +24,7 @@ interface LoopOutcome {
   steps: ResearchStep[];
   iterations: number;
   capped: boolean;
+  hits?: SearchHit[];
 }
 
 /** 조사 루프 + 보고서 작성을 주입받은 포트로 수행하는 리서치 에이전트(싱글턴: 주제 1회 → 보고서). */
@@ -33,8 +35,32 @@ export function createResearchAgent(ports: ResearchAgentPorts) {
       if (!checked.ok) return checked;
       const loop = await runResearch(ports, checked.value);
       if (!loop.ok) return loop;
+      const hits = loop.value.hits ?? [];
+      const fallbackSources = () => {
+        const sources = extractSources(loop.value.steps);
+        return sources.length ? sources : [...new Set(hits.map((hit) => hit.url).filter(Boolean))];
+      };
+      if (!loop.value.notes && hits.length > 0) {
+        return { ok: true, value: {
+          report: formatSearchResults(hits),
+          steps: loop.value.steps,
+          sources: fallbackSources(),
+          iterations: loop.value.iterations,
+          capped: loop.value.capped,
+        } };
+      }
       const report = await writeReport(ports, checked.value, loop.value.notes);
-      if (!report.ok) return report;
+      if (!report.ok) {
+        return hits.length > 0
+          ? { ok: true, value: {
+            report: formatSearchResults(hits),
+            steps: loop.value.steps,
+            sources: fallbackSources(),
+            iterations: loop.value.iterations,
+            capped: loop.value.capped,
+          } }
+          : report;
+      }
       return { ok: true, value: {
         report: report.value,
         steps: loop.value.steps,
@@ -53,21 +79,27 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
     { role: 'user', content: `주제 ${JSON.stringify(topic)}에 대해 조사를 시작하세요.` },
   ];
   const steps: ResearchStep[] = [];
+  const hits: SearchHit[] = [];
   for (let turn = 1; turn <= MAX_ITERATIONS; turn++) {
     ports.log?.({ event: 'model_request', turn, tools: true });
     const result = await ports.model.complete(conversation, RESEARCH_TOOL_DEFINITIONS, { temperature: 0.2, reasoning_effort: 'none' });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return hits.length > 0 ? { ok: true, value: { notes: '', steps, iterations: turn, capped: false, hits } } : result;
+    }
     const message = result.value;
     ports.log?.({ event: 'model_response', turn, toolCalls: message.tool_calls?.length ?? 0 });
     if (!message.tool_calls?.length) {
       const notes = (message.content ?? message.refusal ?? '').trim();
-      return notes ? { ok: true, value: { notes, steps, iterations: turn, capped: false } }
+      return notes ? { ok: true, value: { notes, steps, iterations: turn, capped: false, hits } }
         : { ok: false, reason: '조사 응답이 비어 있습니다. 다시 시도해주세요.' };
     }
     conversation.push(message);
     for (const toolCall of message.tool_calls) {
       const outcome = await executeToolCall(ports, toolCall, turn);
       if (outcome.step) steps.push(outcome.step);
+      for (const hit of outcome.hits ?? []) {
+        if (!hits.some((existing) => existing.url === hit.url)) hits.push(hit);
+      }
       conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: outcome.content });
     }
   }
@@ -75,9 +107,11 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
   ports.log?.({ event: 'wrap_up' });
   conversation.push({ role: 'user', content: WRAP_UP_MESSAGE });
   const wrapUp = await ports.model.complete(conversation, [], { temperature: 0.2, reasoning_effort: 'none' });
-  if (!wrapUp.ok) return wrapUp;
+  if (!wrapUp.ok) {
+    return hits.length > 0 ? { ok: true, value: { notes: '', steps, iterations: MAX_ITERATIONS, capped: true, hits } } : wrapUp;
+  }
   const notes = (wrapUp.value.content ?? wrapUp.value.refusal ?? '').trim();
-  return notes ? { ok: true, value: { notes, steps, iterations: MAX_ITERATIONS, capped: true } }
+  return notes ? { ok: true, value: { notes, steps, iterations: MAX_ITERATIONS, capped: true, hits } }
     : { ok: false, reason: '조사 마무리 응답이 비어 있습니다. 다시 시도해주세요.' };
 }
 
@@ -94,6 +128,7 @@ interface ToolCallOutcome {
   content: string;
   ok: boolean;
   step?: ResearchStep;
+  hits?: SearchHit[];
 }
 
 async function executeToolCall(ports: ResearchAgentPorts, toolCall: FunctionToolCall, turn: number): Promise<ToolCallOutcome> {
@@ -119,6 +154,7 @@ async function runSearch(ports: ResearchAgentPorts, args: Record<string, unknown
   try {
     const result = await ports.search(query, maxResults);
     return { ok: result.ok, step: { tool: 'search_web', args, ok: result.ok },
+      ...(result.ok ? { hits: result.value } : {}),
       content: result.ok ? formatSearchResults(result.value) : formatToolError('search_web', result.reason) };
   } catch {
     return { ok: false, step: { tool: 'search_web', args, ok: false },

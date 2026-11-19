@@ -55,10 +55,10 @@ export function createResearchApi(deps: ResearchApiDependencies) {
     try { deps.log?.({ topicLength: topic.trim().length, iterations: result.ok ? result.value.iterations : 0,
       toolCalls: result.ok ? result.value.steps.length : 0, ms: Date.now() - started }); } catch { /* Metrics cannot change an outcome. */ }
     return result.ok ? Response.json(result.value, { headers: { 'Cache-Control': 'no-store' } })
-      : error(502, '리서치를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      : error(502, '일시적으로 응답할 수 없습니다. 잠시 후 다시 시도해 주세요.');
   });
   api.all('/api/research', () => error(405, 'POST 요청만 가능합니다.', { Allow: 'POST' }));
   api.notFound(() => error(404, '요청한 API를 찾을 수 없습니다.'));
-  api.onError(() => error(502, '리서치를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+  api.onError(() => error(502, '일시적으로 응답할 수 없습니다. 잠시 후 다시 시도해 주세요.'));
   return api;
 }

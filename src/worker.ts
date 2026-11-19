@@ -35,6 +35,7 @@ export interface Env extends TalkRateLimitBindings {
   TALK_AUDIO?: R2Bucket;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  OPENAI_FALLBACK_MODEL?: string;
   OPENAI_TRANSCRIBE_MODEL?: string;
   OPENAI_REALTIME_MODEL?: string;
   OPENAI_TTS_VOICE?: string;
@@ -50,7 +51,7 @@ export interface Env extends TalkRateLimitBindings {
 }
 
 export function createResearchEndpoint(
-  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT'>,
+  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_FALLBACK_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'NCP_API_KEY_ID' | 'NCP_API_KEY' | 'RESEARCH_LIMIT'>,
   options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void } = {},
 ) {
   return createResearchApi({
@@ -62,7 +63,7 @@ export function createResearchEndpoint(
         return { ok: false, reason: '리서치 공급자 설정이 필요합니다.' };
       }
       const signal = AbortSignal.any([external, AbortSignal.timeout(540_000)]);
-      const model = createOpenAICompletion({ model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY,
+      const model = createOpenAICompletion({ model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL, apiKey: env.OPENAI_API_KEY,
         baseUrl: env.OPENAI_BASE_URL, logErrors: false, strictTools: false });
       const search = createMergedResearchSearch([
         ...(hasBrave ? [createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY })] : []),
@@ -100,7 +101,7 @@ export default {
     const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
       : ['json', 'react'].includes(env.OPENAI_TOOL_MODE ?? '') ? createToolChat : createPlanExecuteChat;
     const modelConfig = {
-      model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
+      model: env.OPENAI_MODEL, fallbackModel: env.OPENAI_FALLBACK_MODEL, apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL,
     };
     const model = createOpenAICompletion(modelConfig);
     const queensModel = createOpenAICompletion({ ...modelConfig, reasoningEffort: 'none' });

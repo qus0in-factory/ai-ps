@@ -1,6 +1,15 @@
 import type { CompletionGateway, CompletionMessage, CompletionOptions, CompletionParams, CompletionResponse, FunctionCompletionGateway } from '../domain/completion.ts';
 import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
+import { fetchWithRetry, isRetryableStatus } from './http-client.ts';
+
+export const DEFAULT_FALLBACK_MODEL = 'gpt-6.1-terra';
+
+function isRetryableCompletionFailure(reason: string, signal?: AbortSignal): boolean {
+  if (signal?.aborted || reason === '모델 API 키가 설정되지 않았습니다.') return false;
+  const status = Number(reason.match(/\(HTTP (\d+)\)/)?.[1]);
+  return Number.isFinite(status) ? isRetryableStatus(status) : true;
+}
 
 type ProviderCompletionParams = Omit<CompletionParams, 'tools'> & {
   tools?: { type: 'function'; function: ToolDefinition & { strict: boolean } }[];
@@ -40,7 +49,7 @@ export async function completion(
     const baseUrl = (options.baseUrl?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const timeout = AbortSignal.timeout(options.timeoutMs ?? 60_000);
     signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-    const response = await (options.fetcher ?? fetch)(`${baseUrl}/chat/completions`, {
+    const response = await (options.fetcher ?? fetchWithRetry)(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -79,7 +88,7 @@ export async function completion(
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
+  config: { model?: string; fallbackModel?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
@@ -91,8 +100,8 @@ export function createOpenAICompletion(
       const functions = tools.map((definition) => ({
         type: 'function' as const, function: { ...definition, strict: config.strictTools ?? true },
       }));
-      const result = await completion({
-        model, messages,
+      const params = {
+        messages,
         ...(settings.max_completion_tokens !== undefined ? { max_completion_tokens: settings.max_completion_tokens } : {}),
         ...(responseFormat ? { response_format: responseFormat } : {}),
         ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
@@ -101,9 +110,17 @@ export function createOpenAICompletion(
         ...(functions.length ? { tools: functions, reasoning_effort: 'none' as const }
           : config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}),
         ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
-      }, {
+      };
+      const callOptions = {
         debugErrors: config.debugErrors, logErrors: config.logErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,
-      });
+      };
+      let result = await completion({ model, ...params }, callOptions);
+      if (!result.ok && isRetryableCompletionFailure(result.reason, settings.signal)) {
+        const fallback = (config.fallbackModel ?? process.env.OPENAI_FALLBACK_MODEL)?.trim() || DEFAULT_FALLBACK_MODEL;
+        if (fallback && fallback !== model) {
+          result = await completion({ model: fallback, ...params }, { ...callOptions, fetcher: config.fetcher ?? fetch });
+        }
+      }
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;
       return message ? { ok: true, value: message }

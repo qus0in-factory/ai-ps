@@ -1,9 +1,10 @@
 import type { Tool } from '../domain/tools.ts';
 import type { QueensOperations } from '../domain/queens/types.ts';
+import { fetchWithRetry } from './http-client.ts';
 import { createQueensTools } from './queens-tools.ts';
 
 export function createTools(
-  { apiKey, fetcher = fetch, now = () => new Date(), queens }: {
+  { apiKey, fetcher = fetchWithRetry, now = () => new Date(), queens }: {
     apiKey?: string;
     fetcher?: typeof fetch;
     now?: () => Date;
