@@ -2,6 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFunctionToolChat } from '../../src/app/function-tool-chat.ts';
 import type { ToolLogEvent } from '../../src/domain/tools.ts';
+import { wrapUntrusted } from '../../src/domain/untrusted.ts';
+
+function unwrapToolResult(content: string): string {
+  const match = content.match(/^<untrusted kind="tool_result">\n([\s\S]+)\n<\/untrusted>$/);
+  assert.ok(match, `expected wrapped tool_result, got: ${content}`);
+  return match[1]!;
+}
 
 const definition = { name: 'get_current_time', description: 'Current time', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } };
 
@@ -16,8 +23,8 @@ describe('Given native function calling', () => {
         { id: 'time-2', type: 'function', function: { name: 'get_current_time', arguments: '{}' } },
       ] } };
       assert.deepEqual(messages.slice(-2), [
-        { role: 'tool', tool_call_id: 'time-1', content: '{"ok":true,"value":{"time":"20:00"}}' },
-        { role: 'tool', tool_call_id: 'time-2', content: '{"ok":true,"value":{"time":"20:00"}}' },
+        { role: 'tool', tool_call_id: 'time-1', content: wrapUntrusted('tool_result', '{"ok":true,"value":{"time":"20:00"}}') },
+        { role: 'tool', tool_call_id: 'time-2', content: wrapUntrusted('tool_result', '{"ok":true,"value":{"time":"20:00"}}') },
       ]);
       return { ok: true, value: { role: 'assistant', content: '현재 20시입니다.' } };
     } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: true, value: { time: '20:00' } }) }], (entry) => logs.push(entry));
@@ -32,7 +39,7 @@ describe('Given native function calling', () => {
       if (turn++ === 0) return { ok: true, value: { role: 'assistant', content: null, tool_calls: [
         { id: 'bad', type: 'function', function: { name: 'get_current_time', arguments: '{invalid' } },
       ] } };
-      assert.equal(JSON.parse(messages.at(-1)!.content!).ok, false);
+      assert.equal(JSON.parse(unwrapToolResult(messages.at(-1)!.content!)).ok, false);
       return { ok: true, value: { role: 'assistant', content: '다시 시도해주세요.' } };
     } }, [{ definition, effect: 'read' as const, execute: async () => { throw new Error('Must not execute'); } }]);
     assert.equal((await chat.complete([{ role: 'user', content: '시간' }])).ok, true);

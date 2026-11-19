@@ -10,6 +10,12 @@ const plan = { type: 'plan', goal: '서울과 부산 온도 비교', steps: [
 ] };
 const answer = (value: unknown) => ({ ok: true as const, value: { role: 'assistant' as const, content: JSON.stringify(value) } });
 
+function parseUntrustedJson(content: string): Record<string, any> {
+  const match = content.match(/^<untrusted kind="tool_result">\n([\s\S]+)\n<\/untrusted>$/);
+  assert.ok(match, `expected wrapped tool_result, got: ${content}`);
+  return JSON.parse(match[1]!);
+}
+
 describe('Given Plan and Execute with a ReAct executor', () => {
   it('When all four executors use their full budgets Then remains bounded across the whole request', async () => {
     let calls = 0;
@@ -44,10 +50,10 @@ describe('Given Plan and Execute with a ReAct executor', () => {
         return answer({ type: 'tool_call', thought: `${city} 기온을 조회합니다.`, name: 'get_current_weather', arguments: { city } });
       }
       if (calls === 3 || calls === 5) {
-        assert.equal(JSON.parse(messages.at(-1)!.content).type, 'tool_result');
+        assert.equal(parseUntrustedJson(messages.at(-1)!.content).type, 'tool_result');
         return answer({ type: 'message', content: calls === 3 ? '서울은 10°C' : '부산은 15°C' });
       }
-      const results = JSON.parse(messages.at(-1)!.content).results;
+      const results = parseUntrustedJson(messages.at(-1)!.content).results;
       assert.equal(results[0].observations[0].result.value.temperature_c, 10);
       assert.equal(results[1].observations[0].result.value.temperature_c, 15);
       return answer({ type: 'message', content: '부산이 5°C 높습니다.' });
@@ -98,7 +104,7 @@ describe('Given Plan and Execute with a ReAct executor', () => {
       if (calls === 1) return answer({ ...plan, steps: [plan.steps[0]] });
       if (calls === 2) return answer({ type: 'tool_call', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } });
       if (calls === 3) return answer({ type: 'message', content: '조회 실패' });
-      assert.equal(JSON.parse(messages.at(-1)!.content).results[0].result.ok, false);
+      assert.equal(parseUntrustedJson(messages.at(-1)!.content).results[0].result.ok, false);
       return answer({ type: 'message', content: '날씨를 조회하지 못했습니다.' });
     } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: false, reason: '날씨 서비스 오류' }) }]);
     assert.equal((await chat.complete([{ role: 'user', content: '날씨' }], (step) => progress.push(step))).ok, true);

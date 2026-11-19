@@ -10,6 +10,12 @@ const definition = {
 };
 const answer = (content: string) => ({ ok: true as const, value: { role: 'assistant' as const, content } });
 
+function parseToolResult(content: string): Record<string, any> {
+  const match = content.match(/^<untrusted kind="tool_result">\n([\s\S]+)\n<\/untrusted>$/);
+  assert.ok(match, `expected wrapped tool_result, got: ${content}`);
+  return JSON.parse(match[1]!);
+}
+
 describe('Given a chat using prompted JSON tool calls', () => {
   it('When the model requests a tool Then sends strict json_schema and accepts JSON-string arguments', async () => {
     let turn = 0;
@@ -38,7 +44,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
       assert.equal(messages[0]?.role, 'system');
       assert.ok(messages[0]!.content.includes('get_current_weather'));
       if (turn++ === 0) return answer('{"type":"tool_call","name":"get_current_weather","arguments":{"city":"Seoul,KR"}}');
-      assert.deepEqual(JSON.parse(messages.at(-1)!.content), {
+      assert.deepEqual(parseToolResult(messages.at(-1)!.content), {
         type: 'tool_result', name: 'get_current_weather', result: { ok: true, value: { temperature: 10 } },
       });
       assert.equal(messages.at(-1)!.role, 'user');
@@ -92,7 +98,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
     let turn = 0;
     const chat = createToolChat({ complete: async (messages) => {
       if (turn++ === 0) return answer('{"type":"tool_call","name":"get_current_weather","arguments":{"city":"Seoul"}}');
-      assert.equal(JSON.parse(messages.at(-1)!.content).result.reason, '날씨 서비스 연결 실패');
+      assert.equal(parseToolResult(messages.at(-1)!.content).result.reason, '날씨 서비스 연결 실패');
       return answer('{"type":"message","content":"날씨 서비스에 연결하지 못했습니다."}');
     } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: false, reason: '날씨 서비스 연결 실패' }) }]);
     assert.deepEqual(await chat.complete([{ role: 'user', content: '날씨' }]), {
@@ -119,10 +125,10 @@ describe('Given a ReAct JSON temperature comparison', () => {
     const chat = createToolChat({ complete: async (messages) => {
       if (turn++ === 0) return answer(JSON.stringify({ type: 'tool_call', thought: '먼저 서울의 현재 온도를 조회합니다.', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } }));
       if (turn === 2) {
-        assert.equal(JSON.parse(messages.at(-1)!.content).result.value.temperature_c, 10);
+        assert.equal(parseToolResult(messages.at(-1)!.content).result.value.temperature_c, 10);
         return answer(JSON.stringify({ type: 'tool_call', thought: '부산의 온도를 조회해 비교합니다.', name: 'get_current_weather', arguments: { city: 'Busan,KR' } }));
       }
-      assert.equal(JSON.parse(messages.at(-1)!.content).result.value.temperature_c, 15);
+      assert.equal(parseToolResult(messages.at(-1)!.content).result.value.temperature_c, 15);
       return answer('{"type":"message","content":"서울 10°C, 부산 15°C로 부산이 5°C 높습니다."}');
     } }, [{ definition, effect: 'read' as const, execute: async (args) => {
       const city = (args as { city: string }).city;
