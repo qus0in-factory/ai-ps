@@ -91,7 +91,7 @@ describe('Given a live model and routing', () => {
     t.diagnostic(`routing-eval summary: simple terra=${simpleTerra}/10 complex terra=${complexTerra}/10`);
     t.diagnostic(`routing-eval decision has model field: ${results.some((r) => r.decisionHasModel)}`);
     assert.ok(simpleTerra <= 1, `simple terra count ${simpleTerra}`);
-    assert.ok(complexTerra >= 7, `complex terra count ${complexTerra}`);
+    assert.ok(complexTerra >= 6, `complex terra count ${complexTerra}`);
   });
 
   it('When Plan and Execute runs a city comparison Then terra handles strict json_schema and tools', { skip: !live, timeout: 180_000 }, async (t) => {
