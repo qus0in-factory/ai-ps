@@ -31,10 +31,10 @@ describe('Given the default fast deployment checks', () => {
       }), true);
       assert.deepEqual(calls, [
         { path: '/', method: 'GET' }, { path: '/chat', method: 'GET' },
-        { path: '/adventure', method: 'GET' }, { path: '/queens', method: 'GET' }, { path: '/talk', method: 'GET' },
+        { path: '/adventure', method: 'GET' }, { path: '/queens', method: 'GET' }, { path: '/research', method: 'GET' }, { path: '/talk', method: 'GET' },
         ...(llm ? [{ path: '/api/chat', method: 'POST' }] : []),
       ]);
-      assert.equal(rows.length, llm ? 6 : 5);
+      assert.equal(rows.length, llm ? 7 : 6);
     });
   }
   it('When an explicitly requested LLM check fails Then smoke fails without printing response text', async () => {

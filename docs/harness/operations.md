@@ -11,7 +11,9 @@
 - 열기: `scripts/herdr-open-worker.sh <ps-이름> <codex|claude|opencode> <model> [effort] [옵션]`. 기본은 새 탭이고, 같은 이름이 `herdr agent list`에 있으면 열지 않는다. `--split-of <pane>`는 사용자가 "같은 탭에"라고 말할 때만 쓴다. effort 기본값은 codex·claude가 high, opencode는 variant 목록이 보일 때만 쓴다. `--model-label '<문구>'`는 화면에 보이는 모델 표기다(slug와 다를 때). `--dry-run`으로 명령·키 순서를 먼저 확인한다.
 - OpenCode 모델 선택: 실행 후 `/models` → 검색어 → enter → variant를 화면 폴링으로 진행한다. 같은 이름이 두 공급자에 있으므로 `--provider '<문구>'`로 공급자 줄을 지정한다(ps-ds는 Ollama Cloud, ps-hf는 OpenCode Go). 끝나면 상태줄에 모델명(effort는 `· high` 접미)이 보이는지 `--expect`로 확인한다.
 - OpenCode 기본 모델(Beam Free)을 그대로 쓰는 워커는 `--keep-model`로 연다(예: `scripts/herdr-open-worker.sh ps-beam opencode beam-free --keep-model --model-label 'Beam Free'`). `/models`를 건너뛰고 상태줄만 확인한 뒤 라벨링한다. effort·`--provider`는 확인 조건일 뿐 설정이 아니다.
+- 상태줄 판정: OpenCode 2.3.2·Codex 0.170에서는 마지막 줄이 아니라 OpenCode는 `Build` 포함 줄, Codex는 경로(`~/`)·중간점(`·`) 표기가 있는 줄을 보고, OpenCode 첫 실행 대기는 60초다(`herdr_status_line`·`herdr_wait_for`; 근거 `/tmp/ps-beam-herdr.md`).
 - 라벨: `scripts/herdr-label-models.sh [--dry-run] [--force] [--prefix ps-] [workspace_id]`. 수동 rename 금지. claude 패널은 화면에 모델명이 없어 감지가 안 되므로, 스크립트를 실행하는 패널에는 `SELF_LABEL=ps-opus`를 붙인다. 정본 매핑은 스크립트의 `detect()`다.
+- Claude 패널 rename: 이름이 등록되기 전에는 `herdr agent rename`이 실패할 수 있다. 화면에서 패널 이름이 등록된 것을 확인한 뒤 같은 명령을 다시 실행한다(자동 라벨 스크립트의 rename과 별개).
 - 전송: 지시를 `/tmp/ps-prompts/<워커>.md`에 quoted heredoc으로 쓰고 `scripts/herdr-send.sh <워커> <파일>`로 보낸다. `printf` 조립 금지, `--dry-run` 지원. watcher(`worker-watcher`)는 워커 1명당 1개이고, 지시에 워커 이름·결과 파일 경로·전송 시각을 적는다.
 - effort: `scripts/herdr-set-effort.sh <워커> <effort>`로 세션 한정만 바꾼다. Codex에서 enter는 전역 `~/.codex/config.toml`을 바꿔 다른 워크스페이스(zzik)에 영향을 주므로 금지하고 `s`를 쓴다. 재시작하면 원복되므로 시작 effort는 열 때 인자로 준다. opencode는 `--model`이 필수이고, `--provider '<문구>'`로 변경 뒤 공급자가 같은지 확인한다.
 - TUI 조작은 단계마다 `herdr pane read --source visible`에서 기대 문자열이 보일 때까지 폴링한 뒤 다음 키를 보낸다. `send-text` 직후 `send-keys enter`를 붙여 보내지 않는다.

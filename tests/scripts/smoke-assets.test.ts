@@ -17,7 +17,7 @@ describe('Given smoke routes from OG metadata', () => {
     assert.equal(await smoke(['https://fake.example'], { fetcher: async url => {
       paths.push(new URL(String(url)).pathname); return new Response('<html>page</html>');
     }, table: () => {} }), true);
-    assert.deepEqual(paths, ['/', '/chat', '/adventure', '/queens', '/talk']);
+    assert.deepEqual(paths, ['/', '/chat', '/adventure', '/queens', '/research', '/talk']);
   });
   it('When metadata happens to include the chat API Then never enables a paid POST without --llm', async () => {
     for (const llm of [false, true]) {

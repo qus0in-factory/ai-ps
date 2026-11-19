@@ -153,9 +153,9 @@ if [ "$agent" = "opencode" ] && [ -n "$keep_model" ]; then
   if herdr_is_dry; then
     printf '[dry-run] keep-model: /models 메뉴 건너뜀, 상태줄에서 "%s"만 확인\n' "$expect"
   fi
-  herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 30 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
+  herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 60 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
 elif [ "$agent" = "opencode" ]; then
-  herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 30 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
+  herdr_wait_for "$pane" 'opencode|OpenCode|│|[❯›]' 60 || herdr_die "OpenCode 화면이 준비되지 않았습니다."
   herdr_send_text "$pane" "/models"
   herdr_wait_echo "$pane" "/models" || herdr_die "OpenCode 에 '/models' 입력이 반영되지 않았습니다."
   herdr_enter "$pane"

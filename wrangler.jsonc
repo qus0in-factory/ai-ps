@@ -13,7 +13,8 @@
   "observability": { "enabled": true },
   "ratelimits": [
     { "name": "TALK_AUDIO_LIMIT", "namespace_id": "2061088357", "simple": { "limit": 10, "period": 60 } },
-    { "name": "TALK_TURN_LIMIT", "namespace_id": "3990254962", "simple": { "limit": 20, "period": 60 } }
+    { "name": "TALK_TURN_LIMIT", "namespace_id": "3990254962", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RESEARCH_LIMIT", "namespace_id": "1406795203", "simple": { "limit": 3, "period": 60 } }
   ],
   "r2_buckets": [
     { "binding": "TALK_AUDIO", "bucket_name": "ai-ps-talk-audio" }

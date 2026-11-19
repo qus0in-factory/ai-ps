@@ -1,8 +1,29 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseEnv } from 'node:util';
 import { filterAppSecrets, parseDeployment, staleSecretNames } from './lib/release-tools.mjs';
 import { ROOT, STORE, command, noLocalStore, fail, cli, parseOptions } from './lib/command.mjs';
+
+export function mapResearchSecretNames(text) {
+  const env = parseEnv(text);
+  const aliases = {
+    BRAVE_SEARCH_API_KEY: 'BRAVE-SEARCH-API-KEY',
+    NCP_API_KEY_ID: 'X-NCP-APIGW-API-KEY-ID',
+    NCP_API_KEY: 'X-NCP-APIGW-API-KEY',
+  };
+  return Object.fromEntries(Object.entries(aliases).flatMap(([name, alias]) => {
+    const value = env[name]?.trim() ? env[name] : env[alias];
+    return value?.trim() ? [[name, value]] : [];
+  }));
+}
+
+export function filterDeploySecrets(text) {
+  const mapped = mapResearchSecretNames(text);
+  // NCP probes returned 401; no runtime consumer exists, so never upload NCP keys.
+  const researchAllowlist = ['BRAVE_SEARCH_API_KEY'];
+  return { ...filterAppSecrets(text), ...Object.fromEntries(researchAllowlist.filter(key => mapped[key]).map(key => [key, mapped[key]])) };
+}
 
 export async function deploy(args, { cwd = ROOT, execute = command, print = console.log } = {}) {
   if (args.includes('--help')) {
@@ -20,7 +41,7 @@ export async function deploy(args, { cwd = ROOT, execute = command, print = cons
   let secrets = {};
   if (!skipSecrets) {
     try {
-      if (!dry || existsSync(join(cwd, '.env'))) secrets = filterAppSecrets(readFileSync(join(cwd, '.env'), 'utf8'));
+      if (!dry || existsSync(join(cwd, '.env'))) secrets = filterDeploySecrets(readFileSync(join(cwd, '.env'), 'utf8'));
     } catch { fail('env', 'cannot read or parse .env; use --skip-secrets to preserve remote secrets'); }
     print(`SECRET KEYS: ${Object.keys(secrets).join(', ') || '(none)'}`);
   }
@@ -52,6 +73,7 @@ export async function deploy(args, { cwd = ROOT, execute = command, print = cons
       }
       if (remoteSecrets !== null) {
         const stale = staleSecretNames(remoteSecrets, secrets);
+        if (!secrets.BRAVE_SEARCH_API_KEY && JSON.parse(remoteSecrets).some(item => item.name === 'BRAVE_SEARCH_API_KEY')) stale.push('BRAVE_SEARCH_API_KEY');
         if (stale.length) print(`WARN remote app secrets omitted from .env are preserved (not deleted): ${stale.join(', ')}`);
       }
       if (Object.keys(secrets).length) {

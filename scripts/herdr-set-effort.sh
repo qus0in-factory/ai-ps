@@ -141,7 +141,7 @@ case "$agent" in
     if herdr_is_dry; then
       provider_before=${provider:-<상태줄에서 읽음>}
     else
-      before_line=$(herdr_last_line "$(herdr_visible "$pane")")
+      before_line=$(herdr_last_line "$(herdr_visible "$pane")" "$match_label")
       if [ -n "$provider" ]; then
         provider_before=$provider
       else

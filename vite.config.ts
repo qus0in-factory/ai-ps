@@ -23,9 +23,11 @@ import { createCachedSpeaker } from './src/app/talk/cached-speaker.ts';
 import { createMemoryAudioCache } from './src/infra/memory-audio-cache.ts';
 import { createRealtimeSpeaker, REALTIME_SPEECH_PROMPT_VERSION } from './src/infra/openai-realtime-speech.ts';
 import { connectNodeRealtime } from './src/infra/node-realtime-connect.ts';
+import { createResearchEndpoint } from './src/worker.ts';
+import { getPath } from 'hono/utils/url';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_']);
+  const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'OWM_', 'LOG_', 'ADVENTURE_', 'BRAVE_', 'BRAVE-']);
   const logger = createLogger({ level: env.LOG_LEVEL });
   const talkLog = createTalkLogger(logger);
   const createGateway = env.OPENAI_TOOL_MODE === 'function' ? createFunctionToolChat
@@ -38,14 +40,18 @@ export default defineConfig(({ mode }) => {
     model: env.OPENAI_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1-mini', voice: env.OPENAI_TTS_VOICE?.trim() || 'coral' };
   const speaker = createCachedSpeaker(createRealtimeSpeaker({ ...speech, connect: connectNodeRealtime, warn: entry => logger.warn(entry) }),
     createMemoryAudioCache(), { model: speech.model, voice: speech.voice, promptVersion: REALTIME_SPEECH_PROMPT_VERSION, warn: entry => logger.warn(entry) });
-  const listener = getRequestListener(createApi({
+  const existingApi = createApi({
     talk: { tutor: createTutor(model, { log: talkLog }), speaker, transcriber: createOpenAITranscriber({
       apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL, model: env.OPENAI_TRANSCRIBE_MODEL,
     }), log: talkLog },
     reply: createReply(createGateway(model, tools, createToolLogger(logger))),
     adventure: createGameMaster(model, { temperature: env.ADVENTURE_TEMPERATURE, log: createAdventureLogger(logger) }),
     queens: createQueensGenerator(queensModel, { log: createQueensLogger(logger) }),
-  }).fetch);
+  });
+  const research = createResearchEndpoint({ OPENAI_MODEL: env.OPENAI_MODEL, OPENAI_API_KEY: env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL, BRAVE_SEARCH_API_KEY: env.BRAVE_SEARCH_API_KEY?.trim() || env['BRAVE-SEARCH-API-KEY'],
+  }, { log: metrics => logger.info(metrics) });
+  const listener = getRequestListener(request => getPath(request) === '/api/research' ? research.fetch(request) : existingApi.fetch(request));
   const api = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     if (req.url?.split('?')[0].startsWith('/api/')) listener(req, res);
     else next();

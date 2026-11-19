@@ -92,9 +92,42 @@ herdr_bottom_lines() {
   printf '%s\n' "$1" | awk 'NF {a[++n]=$0} END {for (i=(n>8?n-7:1); i<=n; i++) print a[i]}'
 }
 
-# 상태줄 = 화면의 마지막 비어 있지 않은 줄 하나. 메뉴 잔상·입력 echo는 근거로 쓰지 않는다.
-herdr_last_line() {
-  printf '%s\n' "$1" | awk 'NF {line=$0} END {print line}'
+# 상태줄을 고른다. "마지막 비어 있지 않은 줄"이 아니라:
+#  - OpenCode: 'Build' 가 들어 있는 줄 (버전 번호 줄이 마지막인 경우가 있음)
+#  - Codex: 모델명(needle, 대소문자 무시)이 들어 있는 줄
+#  - 그 외: '·' 또는 '~/' 가 들어 있는 줄, 최후에는 마지막 비어 있지 않은 줄.
+# needle 은 선택 인자(모델 표기·검증 문자열)다. 메뉴 잔상·입력 echo는 근거로 쓰지 않는다.
+herdr_status_line() { # <screen> [needle]
+  local screen=$1 needle=${2:-}
+  printf '%s\n' "$screen" | awk -v needle="$needle" '
+    NF { lines[++n] = $0 }
+    END {
+      # OpenCode: Build 포함 줄(아래에서 위로, 가장 아래 것)
+      for (i = n; i >= 1; i--) {
+        if (tolower(lines[i]) ~ /build/) { print lines[i]; exit }
+      }
+      # Codex 상태줄: 경로 표기(~\/)가 있는 줄을 우선한다(꼬리 줄의 중간점과 구분).
+      for (i = n; i >= 1; i--) {
+        if (index(lines[i], "~/") > 0) { print lines[i]; exit }
+      }
+      # 중간점(·)이 있는 줄(OpenCode effort 표기, Codex 상태줄)
+      for (i = n; i >= 1; i--) {
+        if (index(lines[i], "·") > 0) { print lines[i]; exit }
+      }
+      # needle 이 주어지면 그 문자열(대소문자 무시)이 들어 있는 줄
+      if (needle != "") {
+        nl = tolower(needle)
+        for (i = n; i >= 1; i--) {
+          if (index(tolower(lines[i]), nl) > 0) { print lines[i]; exit }
+        }
+      }
+      if (n > 0) print lines[n]
+    }'
+}
+
+# 하위 호환: herdr_last_line 은 herdr_status_line 의 별칭이다(needle 선택 인자 지원).
+herdr_last_line() { # <screen> [needle]
+  herdr_status_line "$@"
 }
 
 # 화면 읽기: 남은 시간 한도(기본 HERDR_READ_TIMEOUT)를 넘기면 SIGTERM → 1초 유예 → SIGKILL.
@@ -259,10 +292,11 @@ herdr_verify_text() { # <pane> <표시 문자열> [timeout]
     printf '[dry-run] verify status text "%s" on %s (normalized, last line)\n' "$text" "$pane"
     return 0
   fi
-  local start=$SECONDS line
+  local start=$SECONDS line status
   while :; do
     line=$(herdr_read_limited "$pane" "$(herdr_read_limit_for "$start" "$timeout")") || return 2
-    case "$(herdr_normalize "$(herdr_last_line "$line")")" in
+    status=$(herdr_last_line "$line" "$text")
+    case "$(herdr_normalize "$status")" in
       *"$needle"*) return 0 ;;
     esac
     if [ $((SECONDS - start)) -ge "$timeout" ]; then return 1; fi
@@ -278,10 +312,11 @@ herdr_verify_effort() { # <pane> <effort> [timeout]
     printf '[dry-run] verify status effort token "%s" on %s (last line, exact)\n' "$effort" "$pane"
     return 0
   fi
-  local start=$SECONDS text
+  local start=$SECONDS text status
   while :; do
     text=$(herdr_read_limited "$pane" "$(herdr_read_limit_for "$start" "$timeout")") || return 2
-    if printf '%s\n' "$(herdr_last_line "$text")" | awk -v target="$effort" '
+    status=$(herdr_last_line "$text" "$effort")
+    if printf '%s\n' "$status" | awk -v target="$effort" '
         {
           line = $0
           gsub(/[·•|,;:()\[\]{}]/, " ", line)

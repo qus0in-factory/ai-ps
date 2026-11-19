@@ -20,6 +20,13 @@ import { createOpenAITranscriber } from './infra/openai-transcribe.ts';
 import { createTalkLogger } from './infra/talk-logger.ts';
 import { limitTalkRequest } from './ui/http/talk-rate-limit.ts';
 import type { TalkRateLimitBindings } from './domain/talk/rate-limit.ts';
+import { getPath } from 'hono/utils/url';
+import { createResearchAgent } from './app/research/agent.ts';
+import { createBraveSearch } from './infra/research-brave-search.ts';
+import { createResearchWebReader } from './infra/research-web-reader.ts';
+import { createResearchRateLimit } from './infra/research-rate-limit.ts';
+import { createResearchApi, type ResearchRequestMetrics } from './ui/http/research-api.ts';
+import type { ResearchRateLimitBinding } from './domain/research/rate-limit.ts';
 
 export interface Env extends TalkRateLimitBindings {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -34,12 +41,50 @@ export interface Env extends TalkRateLimitBindings {
   OWM_API_KEY?: string;
   LOG_LEVEL?: string;
   ADVENTURE_TEMPERATURE?: string;
+  BRAVE_SEARCH_API_KEY?: string;
+  RESEARCH_LIMIT?: ResearchRateLimitBinding;
+}
+
+export function createResearchEndpoint(
+  env: Pick<Env, 'OPENAI_MODEL' | 'OPENAI_API_KEY' | 'OPENAI_BASE_URL' | 'BRAVE_SEARCH_API_KEY' | 'RESEARCH_LIMIT'>,
+  options: { requireLimitBinding?: boolean; log?: (metrics: ResearchRequestMetrics) => void } = {},
+) {
+  return createResearchApi({
+    limit: createResearchRateLimit(env.RESEARCH_LIMIT, { required: options.requireLimitBinding }), log: options.log,
+    run: async (topic, external) => {
+      if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim() || !env.BRAVE_SEARCH_API_KEY?.trim()) {
+        return { ok: false, reason: '리서치 공급자 설정이 필요합니다.' };
+      }
+      const signal = AbortSignal.any([external, AbortSignal.timeout(540_000)]);
+      const model = createOpenAICompletion({ model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY,
+        baseUrl: env.OPENAI_BASE_URL, logErrors: false, strictTools: false });
+      const brave = createBraveSearch({ apiKey: env.BRAVE_SEARCH_API_KEY });
+      const allowedHosts = new Set<string>();
+      const reader = createResearchWebReader({ allowedHosts, allowIpLiterals: false });
+      return createResearchAgent({
+        model: { complete: (messages, tools, settings) => model.complete(messages, tools, { ...settings, signal }) },
+        search: async (query, max) => {
+          const result = await brave.search(query, max, signal);
+          if (!result.ok) return result;
+          for (const hit of result.value) allowedHosts.add(new URL(hit.url).hostname.replace(/\.$/, ''));
+          return { ok: true, value: result.value.map(({ title, url, description }) => ({ title, url, summary: description })) };
+        },
+        read: async url => {
+          const result = await reader.read(url, signal);
+          return result.ok ? { ok: true, value: `제목: ${result.value.title || result.value.url}\n주소: ${result.value.url}\n\n${result.value.content}` } : result;
+        },
+      }).run(topic);
+    },
+  });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     const logger = createConsoleLogger({ level: env.LOG_LEVEL });
+    if (getPath(request) === '/api/research') return createResearchEndpoint(env, {
+      requireLimitBinding: true, log: metrics => logger.info(metrics),
+    }).fetch(request);
     const talkLog = createTalkLogger(logger);
     const limited = await limitTalkRequest(request, env, talkLog);
     if (limited) return limited;

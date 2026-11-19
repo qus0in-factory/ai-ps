@@ -10,6 +10,8 @@ import { ChatPage } from './pages/ChatPage.tsx';
 import { AdventurePage } from './pages/AdventurePage.tsx';
 import { IndexPage } from './pages/IndexPage.tsx';
 import { TalkPage } from './pages/TalkPage.tsx';
+import { ResearchPage } from './pages/ResearchPage.tsx';
+import type { ResearchClient } from './widgets/research/types.ts';
 import type { AudioPlayer } from '../domain/talk/listening.ts';
 import type { Recorder } from '../domain/talk/recording.ts';
 import type { TalkClient } from '../domain/talk/types.ts';
@@ -34,6 +36,7 @@ export function App(props: {
   audioPlayer: AudioPlayer;
   talk: TalkClient;
   talkStore: TalkStore;
+  research: ResearchClient;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -43,6 +46,7 @@ export function App(props: {
         <Route path="/queen" component={RedirectToQueens} />
         <Route path="/chat" component={() => <ChatPage chat={props.chat} />} />
         <Route path="/talk" component={() => <TalkPage audioPlayer={props.audioPlayer} recorder={props.recorder} client={props.talk} store={props.talkStore} />} />
+        <Route path="/research" component={() => <ResearchPage client={props.research} />} />
         <Route path="/adventure" component={() => (
           <AdventurePage client={props.adventure} store={props.adventureStore} />
         )} />

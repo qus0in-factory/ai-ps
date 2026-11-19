@@ -2,6 +2,10 @@ import type { CompletionGateway, CompletionMessage, CompletionOptions, Completio
 import type { Result } from '../domain/chat.ts';
 import type { ToolDefinition } from '../domain/tools.ts';
 
+type ProviderCompletionParams = Omit<CompletionParams, 'tools'> & {
+  tools?: { type: 'function'; function: ToolDefinition & { strict: boolean } }[];
+};
+
 // Provider diagnostics are untrusted: never reuse them as a public failure reason.
 function logCompletionError(message: string, apiKey: string | undefined, status?: number, debug = false, timedOut = false) {
   const key = apiKey?.trim();
@@ -23,8 +27,8 @@ function logCompletionError(message: string, apiKey: string | undefined, status?
 }
 
 export async function completion(
-  params: CompletionParams,
-  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch; debugErrors?: boolean } = {},
+  params: ProviderCompletionParams,
+  options: { apiKey?: string; baseUrl?: string; signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean } = {},
 ): Promise<Result<CompletionResponse>> {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   let signal: AbortSignal | undefined;
@@ -47,6 +51,10 @@ export async function completion(
     });
 
     if (!response.ok) {
+      if (options.logErrors === false) {
+        void response.body?.cancel().catch(() => {});
+        return { ok: false, reason: `모델 공급자 요청에 실패했습니다. (HTTP ${response.status})` };
+      }
       const body = await response.text();
       let message = response.statusText;
       try {
@@ -65,13 +73,13 @@ export async function completion(
   } catch (error) {
     const timedOut = (signal?.aborted && signal.reason?.name === 'TimeoutError') ||
       (error instanceof Error && error.name === 'TimeoutError');
-    logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey, undefined, options.debugErrors === true, timedOut);
+    if (options.logErrors !== false) logCompletionError(error instanceof Error ? error.message : 'Unknown provider failure', apiKey, undefined, options.debugErrors === true, timedOut);
     return { ok: false, reason: timedOut ? '모델 응답 시간이 초과되었습니다.' : '모델 공급자에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.' };
   }
 }
 
 export function createOpenAICompletion(
-  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
+  config: { model?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
 ): CompletionGateway & FunctionCompletionGateway {
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
@@ -81,7 +89,7 @@ export function createOpenAICompletion(
       const model = config.model?.trim();
       if (!model) return { ok: false, reason: 'OPENAI_MODEL을 .env에 설정해주세요.' };
       const functions = tools.map((definition) => ({
-        type: 'function' as const, function: { ...definition, strict: true as const },
+        type: 'function' as const, function: { ...definition, strict: config.strictTools ?? true },
       }));
       const result = await completion({
         model, messages,
@@ -94,7 +102,7 @@ export function createOpenAICompletion(
           : config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}),
         ...(settings.reasoning_effort !== undefined ? { reasoning_effort: settings.reasoning_effort } : {}),
       }, {
-        debugErrors: config.debugErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,
+        debugErrors: config.debugErrors, logErrors: config.logErrors, apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher, signal: settings.signal, timeoutMs: settings.timeoutMs,
       });
       if (!result.ok) return result;
       const message = result.value.choices?.[0]?.message;
