@@ -10,6 +10,23 @@ describe('Given deployment environment text', () => {
 });
 
 describe('Given Wrangler deployment output', () => {
+  it('When the binding table includes the research KV namespace Then still extracts the deployment URL and version ID', () => {
+    const output = [
+      'Your Worker has access to the following bindings:',
+      'Binding                                                  Resource',
+      'env.RESEARCH_CACHE (00000000000000000000000000000000)    KV Namespace',
+      '',
+      'Uploaded ai-ps (1.20 sec)',
+      'Deployed ai-ps triggers (0.30 sec)',
+      '  https://ai-ps.qus0in.workers.dev',
+      '  aips.qus0in.dev (custom domain)',
+      'Current Version ID: 12345678-abcd-1234-abcd-123456789abc',
+    ].join('\n');
+    assert.deepEqual(parseDeployment(output), {
+      url: 'https://ai-ps.qus0in.workers.dev', versionId: '12345678-abcd-1234-abcd-123456789abc',
+    });
+  });
+
   it('When a deployment finishes Then extracts only the workers.dev URL and version ID', () => {
     assert.deepEqual(parseDeployment('\u001b[32mDeployed ai-ps\u001b[0m\n  https://ai-ps.qus0in.workers.dev\nCurrent Version ID: 12345678-abcd-1234-abcd-123456789abc'), {
       url: 'https://ai-ps.qus0in.workers.dev', versionId: '12345678-abcd-1234-abcd-123456789abc',

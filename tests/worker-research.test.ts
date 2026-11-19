@@ -80,7 +80,7 @@ describe('Given the Workers research composition', () => {
     assert.equal(calls, 0);
   });
   it('When researching Then composes OpenAI, Brave and protected page reading and logs only aggregate metrics', async t => {
-    let modelCalls = 0; let searchCalls = 0; let pageCalls = 0; let dnsCalls = 0;
+    let modelCalls = 0; let searchCalls = 0; let ncpCalls = 0; let pageCalls = 0; let dnsCalls = 0;
     const logs: unknown[] = [];
     t.mock.method(console, 'info', (...args: unknown[]) => logs.push(args));
     t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
@@ -112,18 +112,22 @@ describe('Given the Workers research composition', () => {
         searchCalls++; assert.equal(new Headers(init?.headers).get('X-Subscription-Token'), 'private-brave');
         return Response.json({ web: { results: [{ title: 'Parks', url: 'https://example.com/parks', description: 'Park summary' }] } });
       }
+      if (url.hostname === 'naverapihub.apigw.ntruss.com') {
+        ncpCalls++;
+        return Response.json({ items: [] });
+      }
       if (url.hostname === 'cloudflare-dns.com') {
         dnsCalls++; return Response.json({ Status: 0, Answer: url.searchParams.get('type') === 'A' ? [{ type: 1, data: '93.184.216.34' }] : [] });
       }
       pageCalls++; assert.equal(url.href, 'https://example.com/parks'); assert.equal(init?.redirect, 'manual');
       return new Response('<main><p>Public park facts</p></main>', { headers: { 'Content-Type': 'text/html' } });
     });
-    const response = await worker.fetch(request(), { ...env(), LOG_LEVEL: 'info' });
+    const response = await worker.fetch(request(), { ...env(), LOG_LEVEL: 'info', NCP_API_KEY_ID: 'fake-id', NCP_API_KEY: 'fake-key' });
     assert.equal(response.status, 200); const body = await response.json();
     assert.match(body.report, /보고서/); assert.deepEqual(body.steps.map((step: { tool: string; ok: boolean }) => [step.tool, step.ok]), [['search_web', true], ['read_webpage', true]]);
     assert.deepEqual(body.sources, ['https://example.com/parks']); assert.equal(body.capped, false);
     assert.deepEqual(body.evaluation, { passed: true, problems: [] });
-    assert.equal(modelCalls, 5); assert.equal(searchCalls, 1); assert.equal(pageCalls, 1); assert.equal(dnsCalls, 2);
+    assert.equal(modelCalls, 5); assert.equal(searchCalls, 1); assert.equal(ncpCalls, 0); assert.equal(pageCalls, 1); assert.equal(dnsCalls, 2);
     const serialized = JSON.stringify(logs); assert.doesNotMatch(serialized, /도시|공원|private-|example\.com|parks|summary|facts|192\.0/);
     assert.equal(logs.length, 1);
     const fields = (logs[0] as [{ topicLength: number; toolCalls: number }])[0]; assert.equal(fields.topicLength, 5); assert.equal(fields.toolCalls, 2);

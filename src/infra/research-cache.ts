@@ -65,10 +65,14 @@ export interface CachedReaderOptions {
   allowedHosts?: ReadonlySet<string>;
 }
 
+function sameHostPolicy(snapshot: readonly string[], allowedHosts?: ReadonlySet<string>): boolean {
+  return !allowedHosts || (allowedHosts.size === snapshot.length && snapshot.every(host => allowedHosts.has(host)));
+}
+
 export function createCachedReader(
   reader: { read(input: string, external?: AbortSignal): Promise<ResearchAdapterResult<ResearchWebpage>> },
   cache: KvJsonCache,
-  options: CachedReaderOptions = {},
+  { allowedHosts }: CachedReaderOptions = {},
 ): { read(input: string, external?: AbortSignal): Promise<ResearchAdapterResult<ResearchWebpage>> } {
   return {
     async read(input, external) {
@@ -80,13 +84,16 @@ export function createCachedReader(
       } catch {
         // Keep the original string as the cache key for invalid URLs.
       }
-      const key = await sha256Hex(normalized);
+      // The reader checks every redirect hop against this policy and returns only the final URL.
+      // Partition by the complete policy so a hit preserves the checks on intermediate hosts.
+      const hosts = allowedHosts ? [...allowedHosts].sort() : [];
+      const key = await sha256Hex(JSON.stringify([normalized, allowedHosts ? hosts : null]));
       const cached = await cache.get<unknown>(key);
-      if (isPageCache(cached)) {
+      if (isPageCache(cached) && sameHostPolicy(hosts, allowedHosts)) {
         let allowed = true;
-        if (options.allowedHosts) {
+        if (allowedHosts) {
           try {
-            allowed = options.allowedHosts.has(new URL(cached.url).hostname);
+            allowed = allowedHosts.has(new URL(cached.url).hostname.replace(/\.$/, ''));
           } catch {
             allowed = false;
           }
@@ -96,7 +103,7 @@ export function createCachedReader(
         }
       }
       const result = await reader.read(input, external);
-      if (result.ok) {
+      if (result.ok && sameHostPolicy(hosts, allowedHosts)) {
         await cache.put(key, {
           url: result.value.url,
           title: result.value.title,
