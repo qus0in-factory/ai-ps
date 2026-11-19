@@ -7,6 +7,7 @@ import { buildTurnMessages, trimHistory, splitForSummary, buildSummaryMessages, 
 import { parseTurnOutcome } from '../../domain/adventure/outcome.ts';
 import { applyTurn } from '../../domain/adventure/rules.ts';
 import { DICE_TOOL, rollDice } from '../../domain/adventure/dice.ts';
+import { budget } from '../../domain/token-budget.ts';
 
 const TURN_OUTCOME_FORMAT: JsonSchemaResponseFormat = {
   type: 'json_schema',
@@ -82,8 +83,8 @@ export function createGameMaster(model: FunctionCompletionGateway, { random = Ma
         signal?.addEventListener('abort', cancel, { once: true });
       });
       const options: CompletionOptions = summarize
-        ? { max_completion_tokens: 400, reasoning_effort: 'none', ...(temp === undefined ? {} : { temperature: 0.3 }) }
-        : { max_completion_tokens: 1600, response_format: TURN_OUTCOME_FORMAT, ...(temp === undefined ? {} : { temperature: temp }) };
+        ? { ...budget('adventureTool'), reasoning_effort: 'none', ...(temp === undefined ? {} : { temperature: 0.3 }) }
+        : { ...budget('adventureTurn'), response_format: TURN_OUTCOME_FORMAT, ...(temp === undefined ? {} : { temperature: temp }) };
       const result = await Promise.race([model.complete(messages, tools, { ...options, ...(tools.length ? { parallel_tool_calls: false } : {}), signal }), aborted]);
       if (result.ok && (typeof result.value.content === 'string' && result.value.content.length > 16_000)) return { ok: false as const, reason: '모험 응답 크기 제한을 초과했습니다.' };
       return result;

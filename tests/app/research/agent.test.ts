@@ -74,20 +74,20 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     assert.equal(calls.length, 3);
     const research = calls[0]!;
     assert.deepEqual(research.tools.map((tool) => tool.name).sort(), ['read_webpage', 'search_web']);
-    assert.deepEqual(research.options, { temperature: 0.2, reasoning_effort: 'none' });
+    assert.deepEqual(research.options, { temperature: 0.2, reasoning_effort: 'none', max_completion_tokens: 2000, prompt_cache_key: 'ai-ps:researchLoop' });
     const system = research.messages[0];
     assert.equal(system?.role, 'system');
     assert.equal(system?.content, RESEARCH_SYSTEM_PROMPT);
     assert.ok(String(research.messages[1]?.content).includes('"엣지 컴퓨팅"'));
     const report = calls[1]!;
     assert.deepEqual(report.tools, []);
-    assert.deepEqual(report.options, { temperature: 0.3, reasoning_effort: 'none' });
+    assert.deepEqual(report.options, { temperature: 0.3, reasoning_effort: 'none', max_completion_tokens: 3000, prompt_cache_key: 'ai-ps:researchReport' });
     const reportContent = String(report.messages[0]?.content);
     assert.ok(reportContent.includes('조사 노트: 확인한 사실'));
     assert.ok(reportContent.includes('"엣지 컴퓨팅"'));
     const evaluation = calls[2]!;
     assert.deepEqual(evaluation.tools, []);
-    assert.deepEqual(evaluation.options, { temperature: 0, reasoning_effort: 'none', response_format: EVALUATOR_FORMAT });
+    assert.deepEqual(evaluation.options, { temperature: 0, reasoning_effort: 'none', response_format: EVALUATOR_FORMAT, max_completion_tokens: 400, prompt_cache_key: 'ai-ps:researchEval' });
   });
 
   it('When one response carries several tool calls Then they execute in order and each result becomes a tool message', async () => {
@@ -176,7 +176,7 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     for (let index = 0; index < 10; index++) assert.equal(calls[index]!.tools.length, 2);
     const wrapUp = calls[10]!;
     assert.deepEqual(wrapUp.tools, []);
-    assert.deepEqual(wrapUp.options, { temperature: 0.2, reasoning_effort: 'none' });
+    assert.deepEqual(wrapUp.options, { temperature: 0.2, reasoning_effort: 'none', max_completion_tokens: 2000, prompt_cache_key: 'ai-ps:researchLoop' });
     const last = wrapUp.messages.at(-1);
     assert.equal(last?.role, 'user');
     assert.ok(String((last as { content: string } | undefined)?.content).includes(WRAP_UP_MESSAGE));

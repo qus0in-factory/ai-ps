@@ -6,6 +6,7 @@ import { createRandomSolution } from '../../domain/queens/random-solution.ts';
 import { validateGrid } from '../../domain/queens/grid.ts';
 import { breakAlternatives, growRegionsFromProposal, growRegionsFromSolution, growSmallRegions, repairDisconnected } from '../../domain/queens/repair.ts';
 import type { QueensSolution, RegionId } from '../../domain/queens/types.ts';
+import { budget } from '../../domain/token-budget.ts';
 
 interface GeneratorOptions {
   place?: (size: number) => QueensSolution;
@@ -70,7 +71,7 @@ async function propose(model: CompletionGateway, messages: ChatMessage[], signal
   try {
     if (signal.aborted) { cancel(); return await aborted; }
     return await Promise.race([model.complete(messages, {
-      response_format: PROPOSAL_RESPONSE_FORMAT, signal,
+      response_format: PROPOSAL_RESPONSE_FORMAT, signal, ...budget('queensProposal'),
     }), aborted]);
   } catch { return { ok: false as const, reason: '모델 요청 실패' }; }
   finally { signal.removeEventListener('abort', cancel); }

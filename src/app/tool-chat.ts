@@ -2,6 +2,7 @@ import type { ChatGateway, ChatMessage, Result } from '../domain/chat.ts';
 import type { CompletionGateway, JsonSchemaResponseFormat } from '../domain/completion.ts';
 import { parseToolResponse, toolCallKey } from '../domain/tool-response.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
+import { budget } from '../domain/token-budget.ts';
 
 const TOOL_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
   type: 'json_schema',
@@ -66,7 +67,7 @@ export function createToolChat(
       };
       for (let turn = 1; turn <= maxTurns; turn++) {
         log?.({ event: 'model_request', turn });
-        const result = await model.complete(conversation, { response_format: TOOL_RESPONSE_FORMAT });
+        const result = await model.complete(conversation, { response_format: TOOL_RESPONSE_FORMAT, ...budget('chatStep') });
         if (!result.ok) {
           log?.({ event: 'model_error', turn, reason: result.reason });
           return result;

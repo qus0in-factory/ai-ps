@@ -7,6 +7,7 @@ import { normalizeSession, record, only, text, canAddTurn, LIMITS } from '../../
 import { TALK_FIXED_PHRASES } from '../../domain/talk/speech-cache.ts';
 import { parseTutorReply } from '../../domain/talk/reply.ts';
 import { buildTutorMessages, buildReportMessages } from '../../domain/talk/prompt.ts';
+import { budget, type BudgetName } from '../../domain/token-budget.ts';
 
 const TUTOR_REPLY_FORMAT: JsonSchemaResponseFormat = {
   type: 'json_schema',
@@ -44,7 +45,7 @@ export function parseReportRequest(body: unknown): Result<TalkSession> {
 }
 export function createTutor(model: CompletionGateway, options: { log?: TalkLogListener } = {}): Tutor & Reporter {
   const log = options.log;
-  async function request(messages: Parameters<CompletionGateway['complete']>[0], json: boolean, external?: AbortSignal) {
+  async function request(messages: Parameters<CompletionGateway['complete']>[0], json: boolean, external: AbortSignal | undefined, limit: BudgetName) {
     const timeout = AbortSignal.timeout(60_000);
     const signal = external ? AbortSignal.any([external, timeout]) : timeout;
     const cancelled = () => ({ ok: false as const, reason: '요청이 중단되었거나 시간이 초과되었습니다.' });
@@ -55,7 +56,7 @@ export function createTutor(model: CompletionGateway, options: { log?: TalkLogLi
         cancel = () => resolve(cancelled()); signal.addEventListener('abort', cancel, { once: true });
       });
       const result = await Promise.race([model.complete(messages, {
-        reasoning_effort: 'none', max_completion_tokens: 800, signal,
+        reasoning_effort: 'none', signal, ...budget(limit),
         ...(json ? { response_format: TUTOR_REPLY_FORMAT } : {}),
       }), aborted]);
       if (signal.aborted) return cancelled();
@@ -78,7 +79,7 @@ export function createTutor(model: CompletionGateway, options: { log?: TalkLogLi
         log?.({ event: 'turn', ok: true, ms: Date.now() - started, turns, learnerChars, replyChars: TALK_FIXED_PHRASES.greeting.length });
         return { ok: true, value: { mood: 'smile', reply: TALK_FIXED_PHRASES.greeting, correction: null, betterExpression: null } };
       }
-      const result = await request(buildTutorMessages(input.value.session, input.value.text), true, signal);
+      const result = await request(buildTutorMessages(input.value.session, input.value.text), true, signal, 'talkTurn');
       if (!result.ok) {
         log?.({ event: 'turn', ok: false, ms: Date.now() - started, turns, learnerChars });
         return result;
@@ -95,7 +96,7 @@ export function createTutor(model: CompletionGateway, options: { log?: TalkLogLi
         return input;
       }
       const turns = input.value.turns.length;
-      const result = await request(buildReportMessages(input.value), false, signal);
+      const result = await request(buildReportMessages(input.value), false, signal, 'talkReport');
       if (!result.ok) {
         log?.({ event: 'report', ok: false, ms: Date.now() - started, turns });
         return result;

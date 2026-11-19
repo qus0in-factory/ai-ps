@@ -3,6 +3,7 @@ import type { CompletionGateway, JsonSchemaResponseFormat } from '../domain/comp
 import { parseExecutionPlan, type ExecutionPlan } from '../domain/execution-plan.ts';
 import { parseToolResponse, toolCallKey } from '../domain/tool-response.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
+import { budget } from '../domain/token-budget.ts';
 import { createToolChat } from './tool-chat.ts';
 
 const PLAN_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
@@ -90,6 +91,7 @@ export function createPlanExecuteChat(model: CompletionGateway, tools: Tool[], l
           log?.({ event: 'model_request', turn, phase });
           const response = await boundedModel.complete(conversation, {
             response_format: phase === 'planning' ? PLAN_RESPONSE_FORMAT : ANSWER_RESPONSE_FORMAT,
+            ...budget(phase === 'planning' ? 'chatPlan' : 'chatAnswer'),
           });
           if (!response.ok) {
             log?.({ event: 'model_error', turn, reason: response.reason, phase });

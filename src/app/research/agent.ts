@@ -23,6 +23,7 @@ import { validateTopic } from '../../domain/research/topic.ts';
 import { extractSources } from '../../domain/research/sources.ts';
 import type { ResearchEvaluation, ResearchResult, ResearchStep } from '../../domain/research/types.ts';
 import type { ResearchAgentPorts } from './ports.ts';
+import { budget } from '../../domain/token-budget.ts';
 
 export const RESEARCH_TOOL_DEFINITIONS: ToolDefinition[] = [SEARCH_WEB_TOOL, READ_WEBPAGE_TOOL];
 
@@ -99,7 +100,7 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
   const hits: SearchHit[] = [];
   for (let turn = 1; turn <= MAX_ITERATIONS; turn++) {
     ports.log?.({ event: 'model_request', turn, tools: true });
-    const result = await ports.model.complete(conversation, RESEARCH_TOOL_DEFINITIONS, { temperature: 0.2, reasoning_effort: 'none' });
+    const result = await ports.model.complete(conversation, RESEARCH_TOOL_DEFINITIONS, { temperature: 0.2, reasoning_effort: 'none', ...budget('researchLoop') });
     if (!result.ok) {
       return hits.length > 0 ? { ok: true, value: { notes: '', steps, iterations: turn, capped: false, hits } } : result;
     }
@@ -123,7 +124,7 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
   // 상한 도달: tools 없이 마무리 요청 1회로 반드시 정리 응답을 받아낸다.
   ports.log?.({ event: 'wrap_up' });
   conversation.push({ role: 'user', content: WRAP_UP_MESSAGE });
-  const wrapUp = await ports.model.complete(conversation, [], { temperature: 0.2, reasoning_effort: 'none' });
+  const wrapUp = await ports.model.complete(conversation, [], { temperature: 0.2, reasoning_effort: 'none', ...budget('researchLoop') });
   if (!wrapUp.ok) {
     return hits.length > 0 ? { ok: true, value: { notes: '', steps, iterations: MAX_ITERATIONS, capped: true, hits } } : wrapUp;
   }
@@ -135,7 +136,7 @@ export async function runResearch(ports: ResearchAgentPorts, topic: string): Pro
 /** 보고서 작성: 조사 노트만 근거로, tools 없이 온도 0.3으로 호출한다(조사와 작성 분리). */
 export async function writeReport(ports: ResearchAgentPorts, topic: string, notes: string, problems?: readonly string[]): Promise<Result<string>> {
   ports.log?.({ event: 'report' });
-  const result = await ports.model.complete(buildReportMessages(topic, notes, problems), [], { temperature: 0.3, reasoning_effort: 'none' });
+  const result = await ports.model.complete(buildReportMessages(topic, notes, problems), [], { temperature: 0.3, reasoning_effort: 'none', ...budget('researchReport') });
   if (!result.ok) return result;
   const content = (result.value.content ?? result.value.refusal ?? '').trim();
   return content ? { ok: true, value: content } : { ok: false, reason: '보고서 생성에 실패했습니다. 다시 시도해주세요.' };
@@ -148,6 +149,7 @@ export async function evaluateReport(ports: ResearchAgentPorts, notes: string, r
     temperature: 0,
     reasoning_effort: 'none',
     response_format: EVALUATOR_FORMAT,
+    ...budget('researchEval'),
   });
   if (!result.ok) return result;
   return parseEvaluation(result.value.content ?? '');

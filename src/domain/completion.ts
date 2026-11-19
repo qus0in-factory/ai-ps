@@ -37,6 +37,7 @@ export interface JsonSchemaResponseFormat {
 export interface CompletionOptions {
   reasoning_effort?: 'none';
   max_completion_tokens?: number;
+  prompt_cache_key?: string;
   response_format?: JsonSchemaResponseFormat;
   temperature?: number;
   tool_choice?: { type: 'function'; function: { name: string } };
@@ -55,6 +56,7 @@ export interface CompletionParams {
   reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   temperature?: number;
   max_completion_tokens?: number;
+  prompt_cache_key?: string;
 }
 
 export interface CompletionResponse {

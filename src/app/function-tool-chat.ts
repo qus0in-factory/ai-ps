@@ -1,6 +1,7 @@
 import type { ChatGateway, Result } from '../domain/chat.ts';
 import type { CompletionMessage, FunctionCompletionGateway, FunctionToolCall } from '../domain/completion.ts';
 import type { Tool, ToolLogger } from '../domain/tools.ts';
+import { budget } from '../domain/token-budget.ts';
 
 export function createFunctionToolChat(
   model: FunctionCompletionGateway, tools: Tool[], log?: ToolLogger,
@@ -34,7 +35,7 @@ export function createFunctionToolChat(
 
       for (let turn = 1; turn <= 5; turn++) {
         log?.({ event: 'model_request', turn });
-        const result = await model.complete(conversation, definitions);
+        const result = await model.complete(conversation, definitions, budget('chatStep'));
         if (!result.ok) {
           log?.({ event: 'model_error', turn, reason: result.reason });
           return result;

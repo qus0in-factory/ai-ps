@@ -9,7 +9,7 @@ describe('Given the text tutor application', () => {
     const tutor = createTutor({ complete: async (messages, options) => {
       calls.push(options); assert.equal(Object.hasOwn(options!, 'temperature'), false);
       assert.equal(options?.reasoning_effort, 'none');
-      assert.equal(options?.max_completion_tokens, 800); assert.ok(options?.signal);
+      assert.equal(options?.max_completion_tokens, options?.response_format ? 800 : 2000); assert.ok(options?.signal);
       return { ok: true, value: { role: 'assistant', content: options?.response_format ? '{"reply":"今日はどうでしたか？","correction":null,"betterExpression":null}' : '잘한 표현\n다음에는 과거형을 연습하세요.' } };
     } });
     const session = createSession(); const greeting = await tutor.respond(session);
