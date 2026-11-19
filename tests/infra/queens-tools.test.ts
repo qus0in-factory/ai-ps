@@ -25,7 +25,9 @@ describe('Given registered Queens agent tools', () => {
     let turn = 0;
     const chat = createToolChat({ complete: async (messages) => {
       if (turn++ === 0) return { ok: true, value: { role: 'assistant', content: JSON.stringify({ type: 'tool_call', name: 'verify_puzzle', arguments: puzzle }) } };
-      const observation = JSON.parse(messages.at(-1)!.content).result.value;
+      const wrapped = messages.at(-1)!.content.match(/^<untrusted kind="tool_result">\n([\s\S]+)\n<\/untrusted>$/);
+      assert.ok(wrapped);
+      const observation = JSON.parse(wrapped[1]!).result.value;
       assert.equal(observation.solutionStatus, 'multiple');
       assert.equal(observation.issues[0].solutions.length, 2);
       return { ok: true, value: { role: 'assistant', content: JSON.stringify({ type: 'message', content: observation.issues[0].message }) } };

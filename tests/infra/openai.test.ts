@@ -33,7 +33,9 @@ describe('Given OpenAI completion wired to OpenWeather tools', () => {
         role: 'assistant', content: JSON.stringify({ type: 'tool_call', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } }),
       } }] });
       assert.equal(body.messages.at(-1).role, 'user');
-      const weather = JSON.parse(body.messages.at(-1).content).result.value;
+      const wrapped = String(body.messages.at(-1).content).match(/^<untrusted kind="tool_result">\n([\s\S]+)\n<\/untrusted>$/);
+      assert.ok(wrapped);
+      const weather = JSON.parse(wrapped[1]!).result.value;
       assert.equal(weather.temperature_c, fixture.weather.main.temp);
       assert.ok(!JSON.stringify(body).includes('owm-secret'));
       return Response.json({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ type: 'message', content: '날씨 조회 결과입니다.' }) } }] });
