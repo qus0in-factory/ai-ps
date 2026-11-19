@@ -2,6 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ai-ps",
   "main": "src/worker.ts",
+  "routes": [{ "pattern": "aips.qus0in.dev", "custom_domain": true }],
   "compatibility_date": "2026-11-17",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
