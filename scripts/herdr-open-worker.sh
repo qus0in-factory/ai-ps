@@ -40,7 +40,7 @@ name 은 소문자·숫자·하이픈만, model·effort 는 영문·숫자·._:/
 
 예:
   scripts/herdr-open-worker.sh ps-ds opencode 'deepseek-v4.1-flash:1017' high --provider 'Ollama Cloud' --dry-run
-  scripts/herdr-open-worker.sh ps-sol codex gpt-6.1-sol high
+  scripts/herdr-open-worker.sh ps-sol codex gpt-6.2-sol high
   scripts/herdr-open-worker.sh ps-beam opencode 'beam-free' --keep-model --model-label 'Beam Free'
 USAGE
 }

@@ -10,7 +10,7 @@
 | `ps-grok` | 리뷰 전담(구현 코드). 파일 수정·커밋 금지. 결과는 `/tmp/review-<주제>.md` | Grok CLI (`Grok 4.7`) | high |
 | `ps-hyd` | 구현. 대기·예약 타이머를 쓰지 않는다(agy는 idle에서 타이머가 발화하지 않는다) | agy (`Gemini 4 Hydrogen`) | — |
 
-- 닫힌 워커(2026-11-19 저녁 기준, 다시 열 때 참고): `ps-sol`(Codex `GPT-6.1-Sol`, 백엔드·인프라), `ps-astra`(Codex `GPT-6-Astra`, 리뷰 전용), `ps-glm`(OpenCode `GLM-5.3`, domain·app), `ps-ds`(OpenCode `DeepSeek V4.1 Flash 1017`·Ollama Cloud, 경량 구현·하네스), `ps-hf`(OpenCode `Hy4 flash Free`, 문서), `ps-beam`(OpenCode `Beam Free`, 까다로운 작업 금지). `ps-argon`·`ps-sonnet`은 이번 세션에 쓰고 닫았으며 도구·모델은 다시 열 때 상태줄로 확인해 적는다.
+- 닫힌 워커(2026-11-19 저녁 기준, 다시 열 때 참고): `ps-sol`(Codex `GPT-6.2-Sol`, 백엔드·인프라), `ps-astra`(Codex `GPT-6-Astra`, 리뷰 전용), `ps-glm`(OpenCode `GLM-5.3`, domain·app), `ps-ds`(OpenCode `DeepSeek V4.1 Flash 1017`·Ollama Cloud, 경량 구현·하네스), `ps-hf`(OpenCode `Hy4 flash Free`, 문서), `ps-beam`(OpenCode `Beam Free`, 까다로운 작업 금지). `ps-argon`·`ps-sonnet`은 이번 세션에 쓰고 닫았으며 도구·모델은 다시 열 때 상태줄로 확인해 적는다.
 - 모델·fast 모드 변경은 사용자가 한다. effort는 총괄이 작업 성격에 맞춰 세션 한정으로 바꿀 수 있다(Codex는 `s`, enter 금지). 재시작 뒤에는 상태줄에서 effort를 다시 확인한다.
 
 ## 배치 규칙
@@ -60,5 +60,5 @@ pnpm은 --config.store-dir=/Users/young-mini/Library/pnpm/store로 실행하고 
 ```
 
 ## 모델 약칭 및 감지 매핑
-- 접두어 `ps-`. Codex는 상태줄 `GPT-6.1-Sol`→`sol`, `GPT-6-Astra`→`astra`(agent 필드만으로 판정하지 않는다). OpenCode는 `DeepSeek <버전>`→`ds`, `Hy4 flash`→`hf`, `GLM-<버전>`→`glm`, `Beam Free`→`beam`(`ps-beam` 외 워커에서는 미선택 상태로 취급). Claude는 `Opus|Fable <버전>`→`opus`|`fable`. Grok CLI는 `Grok <버전>`→`grok`, agy는 `Hydrogen`→`hyd`이며 라벨 스크립트가 아직 지원하지 않아 `herdr agent rename`으로 붙인다.
+- 접두어 `ps-`. Codex는 상태줄 `GPT-6.2-Sol`→`sol`, `GPT-6-Astra`→`astra`(agent 필드만으로 판정하지 않는다). OpenCode는 `DeepSeek <버전>`→`ds`, `Hy4 flash`→`hf`, `GLM-<버전>`→`glm`, `Beam Free`→`beam`(`ps-beam` 외 워커에서는 미선택 상태로 취급). Claude는 `Opus|Fable <버전>`→`opus`|`fable`. Grok CLI는 `Grok <버전>`→`grok`, agy는 `Hydrogen`→`hyd`이며 라벨 스크립트가 아직 지원하지 않아 `herdr agent rename`으로 붙인다.
 - 정본 패턴은 `scripts/herdr-label-models.sh`의 `detect()`다.
