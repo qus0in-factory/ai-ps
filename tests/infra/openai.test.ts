@@ -372,3 +372,111 @@ describe('Given an explicit reasoning option for a tool-free summary', () => {
     assert.ok(!('temperature' in body));
   });
 });
+
+
+describe('Given a completion gateway with decisions routing', () => {
+  const okCompletion = () => Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+  const terraAnswer = (confidence = 0.9) => Response.json({ answers: [{ type: 'choice', choice: 'terra', confidence }] });
+  const messages = [{ role: 'system' as const, content: '고정 지시' }, { role: 'user' as const, content: '서울과 부산 기온 비교' }];
+
+  it('When the decision chooses terra Then generates once with the complex model', async () => {
+    const urls: string[] = [];
+    let decision: Record<string, unknown> | undefined;
+    let generated: Record<string, unknown> | undefined;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => {
+        urls.push(String(url));
+        const headers = new Headers(init!.headers);
+        assert.equal(headers.get('Authorization'), 'Bearer test');
+        assert.equal(headers.get('Content-Type'), 'application/json');
+        if (String(url).endsWith('/decisions')) {
+          decision = JSON.parse(String(init!.body));
+          return terraAnswer();
+        }
+        generated = JSON.parse(String(init!.body));
+        return okCompletion();
+      },
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.deepEqual(urls, ['https://api.openai.com/v1/decisions', 'https://api.openai.com/v1/chat/completions']);
+    assert.equal(decision!.model, 'gpt-6-luna');
+    assert.equal(decision!.input, '서울과 부산 기온 비교');
+    assert.deepEqual(decision!.questions, [{
+      type: 'choice', name: 'route', instructions: '이 요청에 답할 모델을 고른다.',
+      choices: [
+        { value: 'luna', description: '인사, 단순 사실, 한 단계 질문, 도구 1회로 끝나는 요청' },
+        { value: 'terra', description: '여러 단계 추론, 비교, 계획, 긴 글 작성' },
+      ],
+    }]);
+    assert.equal(generated!.model, 'terra-model');
+  });
+
+  it('When the decision confidence is below the threshold Then uses the base model', async () => {
+    let decisions = 0;
+    let generated: Record<string, unknown> | undefined;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => String(url).endsWith('/decisions')
+        ? (decisions++, terraAnswer(0.69))
+        : (generated = JSON.parse(String(init!.body)), okCompletion()),
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.equal(decisions, 1);
+    assert.equal(generated!.model, 'base-model');
+  });
+
+  it('When classification returns HTTP 500 Then uses the base model', async () => {
+    let decisions = 0;
+    let generated: Record<string, unknown> | undefined;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => String(url).endsWith('/decisions')
+        ? (decisions++, new Response('boom', { status: 500 }))
+        : (generated = JSON.parse(String(init!.body)), okCompletion()),
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.equal(decisions, 1);
+    assert.equal(generated!.model, 'base-model');
+  });
+
+  it('When classification times out Then uses the base model and skips the next classification', async t => {
+    const expired = new AbortController();
+    expired.abort(new DOMException('timeout', 'TimeoutError'));
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 2_000 ? expired.signal : new AbortController().signal);
+    let decisions = 0;
+    let generated: Record<string, unknown> | undefined;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => {
+        if (String(url).endsWith('/decisions')) { decisions++; init!.signal!.throwIfAborted(); }
+        generated = JSON.parse(String(init!.body));
+        return okCompletion();
+      },
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.equal(decisions, 1);
+    assert.equal(generated!.model, 'base-model');
+  });
+
+  it('When routing is absent Then the decisions endpoint is never called', async () => {
+    const urls: string[] = [];
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', fetcher: async (url) => {
+      urls.push(String(url));
+      return okCompletion();
+    } });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.deepEqual(urls, ['https://api.openai.com/v1/chat/completions']);
+  });
+
+  it('When a terra-routed generation fails Then falls back once to the base model', async () => {
+    const models: string[] = [];
+    let completions = 0;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => {
+        if (String(url).endsWith('/decisions')) return terraAnswer();
+        models.push(JSON.parse(String(init!.body)).model);
+        return ++completions === 1 ? new Response('boom', { status: 500 }) : okCompletion();
+      },
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.deepEqual(models, ['terra-model', 'base-model']);
+  });
+});

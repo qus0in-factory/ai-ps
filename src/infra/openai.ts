@@ -10,6 +10,21 @@ const logger = createConsoleLogger();
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const OPENAI_TIMEOUTS = { completion: 60_000, transcription: 30_000, speech: 30_000 } as const;
 const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
+const ROUTE_THRESHOLD = 0.7;
+const ROUTE_TIMEOUT_MS = 2_000;
+const ROUTE_SKIP_MS = 60_000;
+const DECISION_REQUEST = {
+  model: 'gpt-6-luna',
+  questions: [{
+    type: 'choice', name: 'route', instructions: '이 요청에 답할 모델을 고른다.',
+    choices: [
+      { value: 'luna', description: '인사, 단순 사실, 한 단계 질문, 도구 1회로 끝나는 요청' },
+      { value: 'terra', description: '여러 단계 추론, 비교, 계획, 긴 글 작성' },
+    ],
+  }],
+} as const;
+
+interface RoutingConfig { complexModel: string; threshold?: number }
 
 export interface OpenAIUsageRecord {
   op: 'realtime';
@@ -121,10 +136,47 @@ export async function completion(
   }
 }
 
+/** 분류는 생성 직전 1회. 어떤 실패도 생성 실패로 번지지 않고 기본 모델을 쓴다. */
+async function routeCompletionModel(
+  routing: RoutingConfig | undefined, messages: CompletionMessage[], client: OpenAIClient,
+  signal: AbortSignal | undefined, skipUntil: { value: number },
+): Promise<string | undefined> {
+  const complex = routing?.complexModel?.trim();
+  if (!complex || Date.now() < skipUntil.value) return undefined;
+  const apiKey = client.apiKey ?? process.env.OPENAI_API_KEY;
+  if (!apiKey?.trim()) return undefined;
+  const skip = () => { skipUntil.value = Date.now() + ROUTE_SKIP_MS; };
+  try {
+    const timeout = AbortSignal.timeout(ROUTE_TIMEOUT_MS);
+    const routeSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const input = [...messages].reverse().find(message => message.role === 'user')?.content?.slice(0, 2_000) ?? '';
+    const response = await client.fetcher(client.url('/decisions'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...DECISION_REQUEST, input }),
+      signal: routeSignal,
+    });
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      skip();
+      return undefined;
+    }
+    const data = await response.json() as { answers?: { type?: unknown; choice?: unknown; confidence?: unknown }[] };
+    const answer = data.answers?.[0];
+    return answer?.type === 'choice' && answer.choice === 'terra' &&
+      typeof answer.confidence === 'number' && answer.confidence >= (routing?.threshold ?? ROUTE_THRESHOLD)
+      ? complex : undefined;
+  } catch {
+    skip();
+    return undefined;
+  }
+}
+
 export function createOpenAICompletion(
-  config: { client?: OpenAIClient; model?: string; fallbackModel?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' },
+  config: { client?: OpenAIClient; model?: string; fallbackModel?: string; apiKey?: string; baseUrl?: string; fetcher?: typeof fetch; debugErrors?: boolean; logErrors?: boolean; strictTools?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high'; routing?: RoutingConfig },
 ): CompletionGateway & FunctionCompletionGateway {
   const client = config.client ?? createOpenAIClient({ apiKey: config.apiKey, baseUrl: config.baseUrl, fetcher: config.fetcher });
+  const skipUntil = { value: 0 };
   return {
     async complete(messages: CompletionMessage[], options: ToolDefinition[] | CompletionOptions = {}, nativeOptions: CompletionOptions = {}) {
       const tools = Array.isArray(options) ? options : [];
@@ -150,10 +202,12 @@ export function createOpenAICompletion(
       const callOptions = {
         client, debugErrors: config.debugErrors, logErrors: config.logErrors, signal: settings.signal, timeoutMs: settings.timeoutMs,
       };
-      let result = await completion({ model, ...params }, callOptions);
+      const selected = await routeCompletionModel(config.routing, messages, client, settings.signal, skipUntil) ?? model;
+      let result = await completion({ model: selected, ...params }, callOptions);
       if (!result.ok && isRetryableCompletionFailure(result.reason, settings.signal)) {
-        const fallback = (config.fallbackModel ?? process.env.OPENAI_FALLBACK_MODEL)?.trim() || DEFAULT_FALLBACK_MODEL;
-        if (fallback && fallback !== model) {
+        const fallback = selected !== model ? model
+          : (config.fallbackModel ?? process.env.OPENAI_FALLBACK_MODEL)?.trim() || DEFAULT_FALLBACK_MODEL;
+        if (fallback && fallback !== selected) {
           result = await completion({ model: fallback, ...params }, { ...callOptions, fetcher: config.fetcher ?? fetch });
         }
       }
