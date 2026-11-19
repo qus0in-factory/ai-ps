@@ -147,4 +147,21 @@ describe('Given algorithmic Queens generation with one optional model proposal',
     assert.equal(isGenerationEvent({ kind: 'model', path: ['model'] }), false);
     for (const kind of ['attempt', 'feedback', 'candidate', 'validation']) assert.equal(isGenerationEvent({ kind, retry: 0, message: 'old', regions: null }), false);
   });
+  it('When proposing for different sizes Then the system prompt is byte-identical and size rides the user message', async () => {
+    const systems: string[] = [];
+    const users: string[] = [];
+    const solution7 = Array.from({ length: 7 }, (_, row) => ({ row, column: (row * 2) % 7 }));
+    for (const size of [5, 7]) {
+      let clock = 0;
+      const result = await createQueensGenerator(
+        { complete: async (messages) => { systems.push(messages[0]!.content); users.push(messages[1]!.content); return answer('{}'); } },
+        { place: () => size === 5 ? solution : solution7, now: () => (clock++ < 2 ? 0 : 290_000), random: () => 0.5 },
+      ).generate(size);
+      assert.deepEqual(result, { ok: false, reason: timeoutReason }); // 프롬프트 비교가 목적이라 중단
+    }
+    assert.equal(systems.length, 2);
+    assert.equal(systems[0], systems[1]);
+    assert.equal(JSON.parse(users[0]!).size, 5);
+    assert.equal(JSON.parse(users[1]!).size, 7);
+  });
 });

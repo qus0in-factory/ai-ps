@@ -63,6 +63,27 @@ describe('Given conversation prompts', () => {
     assert.ok(messages[4]!.content.includes('correction'));
     assert.match(messages[0]!.content, /지시.*데이터|data.*instructions/i);
   });
+
+  it('When the schema already enforces the reply shape Then the system prompt omits JSON wording and examples', () => {
+    const system = buildTutorMessages(createSession())[0]!.content;
+    assert.ok(!system.includes('Return one JSON object'));
+    assert.ok(!system.includes('公園に行きます')); // 인용 예시 제거
+  });
+
+  it('When the session exceeds twelve turns Then sends only the last two 6-turn blocks', () => {
+    const turns = (count: number) => Array.from({ length: count }, (_, i) => ({ learner: `발화${i}`, tutor }));
+    const messages = buildTutorMessages({ version: 1, tutor: 'f', turns: turns(13) }, '다음 발화');
+    assert.equal(messages.length, 16); // 시스템 1 + 마지막 두 블록 7쌍 + 새 발화 1
+    assert.equal(messages[1]!.content, '발화6');
+    assert.equal(messages.at(-1)!.content, '다음 발화');
+  });
+
+  it('When turns stay inside the same block range Then the request prefix is byte-identical across requests', () => {
+    const turns = (count: number) => Array.from({ length: count }, (_, i) => ({ learner: `발화${i}`, tutor }));
+    const first = buildTutorMessages({ version: 1, tutor: 'f', turns: turns(13) }, 'A');
+    const second = buildTutorMessages({ version: 1, tutor: 'f', turns: turns(15) }, 'B');
+    assert.equal(JSON.stringify(first.slice(0, 15)), JSON.stringify(second.slice(0, 15)));
+  });
   it('When reporting Then excludes the greeting and includes corrections without system/start prompts', () => {
     const messages = buildReportMessages({ version: 1, tutor: 'f', turns: [{ learner: '', tutor: { ...tutor, reply: 'GREETING_MARKER' } }, { learner: '昨日、公園に行きます。', tutor: { ...tutor, correction: '行きました' } }] });
     assert.ok(!JSON.stringify(messages).includes('GREETING_MARKER'));

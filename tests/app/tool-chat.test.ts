@@ -18,7 +18,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
       options = next;
       if (turn++ === 0) return answer('{"type":"tool_call","thought":"조회","name":"get_current_weather","arguments":"{\\"city\\":\\"Seoul,KR\\"}","content":null}');
       return answer('{"type":"message","thought":"완료","content":"서울은 10도입니다.","name":null,"arguments":null}');
-    } }, [{ definition, execute: async (args) => {
+    } }, [{ definition, effect: 'read' as const, execute: async (args) => {
       assert.deepEqual(args, { city: 'Seoul,KR' });
       return { ok: true, value: { temperature: 10 } };
     } }]);
@@ -30,7 +30,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
   it('When the model requests a tool Then parses JSON and sends the result back as a message', async () => {
     let turn = 0;
     const logs: ToolLogEvent[] = [];
-    const tools: Tool[] = [{ definition, execute: async (args) => {
+    const tools: Tool[] = [{ definition, effect: 'read' as const, execute: async (args) => {
       assert.deepEqual(args, { city: 'Seoul,KR' });
       return { ok: true, value: { temperature: 10 } };
     } }];
@@ -57,7 +57,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
     for (const content of ['{invalid', 'null', '[]', '{}', '{"type":"message","content":3}',
       '{"type":"tool_call","name":"get_current_weather","arguments":"bad"}']) {
       const chat = createToolChat({ complete: async () => answer(content) }, [{
-        definition, execute: async () => { throw new Error('Must not execute'); },
+        definition, effect: 'read' as const, execute: async () => { throw new Error('Must not execute'); },
       }]);
       assert.equal((await chat.complete([{ role: 'user', content: '날씨' }])).ok, false);
     }
@@ -94,7 +94,7 @@ describe('Given a chat using prompted JSON tool calls', () => {
       if (turn++ === 0) return answer('{"type":"tool_call","name":"get_current_weather","arguments":{"city":"Seoul"}}');
       assert.equal(JSON.parse(messages.at(-1)!.content).result.reason, '날씨 서비스 연결 실패');
       return answer('{"type":"message","content":"날씨 서비스에 연결하지 못했습니다."}');
-    } }, [{ definition, execute: async () => ({ ok: false, reason: '날씨 서비스 연결 실패' }) }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: false, reason: '날씨 서비스 연결 실패' }) }]);
     assert.deepEqual(await chat.complete([{ role: 'user', content: '날씨' }]), {
       ok: true, value: '날씨 서비스에 연결하지 못했습니다.',
     });
@@ -124,7 +124,7 @@ describe('Given a ReAct JSON temperature comparison', () => {
       }
       assert.equal(JSON.parse(messages.at(-1)!.content).result.value.temperature_c, 15);
       return answer('{"type":"message","content":"서울 10°C, 부산 15°C로 부산이 5°C 높습니다."}');
-    } }, [{ definition, execute: async (args) => {
+    } }, [{ definition, effect: 'read' as const, execute: async (args) => {
       const city = (args as { city: string }).city;
       cities.push(city);
       return { ok: true, value: { city, temperature_c: city === 'Seoul,KR' ? 10 : 15 } };
@@ -138,7 +138,7 @@ describe('Given a ReAct JSON temperature comparison', () => {
   it('When the same action repeats Then stops without executing it twice', async () => {
     let calls = 0;
     const chat = createToolChat({ complete: async () => answer('{"type":"tool_call","name":"get_current_weather","arguments":{"city":"Seoul,KR"}}') }, [{
-      definition, execute: async () => { calls++; return { ok: true, value: { temperature_c: 10 } }; },
+      definition, effect: 'read' as const, execute: async () => { calls++; return { ok: true, value: { temperature_c: 10 } }; },
     }]);
     const result = await chat.complete([{ role: 'user', content: '날씨' }]);
     assert.equal(result.ok, false);
@@ -150,7 +150,7 @@ describe('Given a ReAct JSON temperature comparison', () => {
     const chat = createToolChat({ complete: async () => {
       calls++;
       return answer(JSON.stringify({ type: 'tool_call', name: 'get_current_weather', arguments: { city: `City${calls}` } }));
-    } }, [{ definition, execute: async () => ({ ok: true, value: {} }) }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: true, value: {} }) }]);
     assert.equal((await chat.complete([{ role: 'user', content: '날씨' }])).ok, false);
     assert.ok(calls <= 6);
   });

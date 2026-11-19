@@ -20,7 +20,7 @@ describe('Given native function calling', () => {
         { role: 'tool', tool_call_id: 'time-2', content: '{"ok":true,"value":{"time":"20:00"}}' },
       ]);
       return { ok: true, value: { role: 'assistant', content: '현재 20시입니다.' } };
-    } }, [{ definition, execute: async () => ({ ok: true, value: { time: '20:00' } }) }], (entry) => logs.push(entry));
+    } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: true, value: { time: '20:00' } }) }], (entry) => logs.push(entry));
     assert.deepEqual(await chat.complete([{ role: 'user', content: '지금 시간' }]), { ok: true, value: '현재 20시입니다.' });
     assert.equal(logs.filter((entry) => entry.event === 'tool_call').length, 2);
     assert.equal(logs.filter((entry) => entry.event === 'tool_result').length, 2);
@@ -34,7 +34,7 @@ describe('Given native function calling', () => {
       ] } };
       assert.equal(JSON.parse(messages.at(-1)!.content!).ok, false);
       return { ok: true, value: { role: 'assistant', content: '다시 시도해주세요.' } };
-    } }, [{ definition, execute: async () => { throw new Error('Must not execute'); } }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => { throw new Error('Must not execute'); } }]);
     assert.equal((await chat.complete([{ role: 'user', content: '시간' }])).ok, true);
   });
 });

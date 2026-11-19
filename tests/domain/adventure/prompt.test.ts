@@ -8,10 +8,11 @@ describe('Given the shared adventure narration prompt', () => {
     const start = buildTurnMessages(createSession(), '첫 장면');
     const turn = buildTurnMessages(createSession(), '둘러보기');
     assert.equal(start[0]!.content, turn[0]!.content);
+    assert.equal(JSON.stringify(start[0]), JSON.stringify(turn[0])); // ① 시스템은 요청 간 바이트 단위로 같다
     assert.match(SYSTEM_PROMPT, /시작.*턴.*당신은 ~합니다/);
     assert.match(SYSTEM_PROMPT, /반말.*사용하지/);
-    assert.ok(SYSTEM_PROMPT.includes('당신은 따뜻한 차를 마십니다.'));
-    assert.ok(!SYSTEM_PROMPT.includes('"narrative":"너는'));
+    assert.ok(!SYSTEM_PROMPT.includes('당신은 따뜻한 차를 마십니다.')); // JSON 예시 제거
+    assert.ok(!SYSTEM_PROMPT.includes('응답은 JSON')); // 응답 형식은 json_schema가 강제한다
   });
   it('When items or places occur in narrative Then provides Korean display names while preserving IDs in structured fields', () => {
     for (const id of ['spare-lens','clock-spring','lamp-oil','lantern-handheld','matches','blanket','tea-tin','rope','driftwood','oilskin', ...LOCATIONS]) {

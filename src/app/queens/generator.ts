@@ -38,14 +38,12 @@ const PROPOSAL_RESPONSE_FORMAT: JsonSchemaResponseFormat = {
   },
 };
 
-function systemPrompt(size: number): string {
-  return [
-    'Propose varied connected color regions around fixed queens; code will finish the puzzle.',
-    `Use exactly ${size} region IDs 0..${size - 1} on a ${size}x${size} grid, each containing one given queen.`,
-    'Keep the queens in place. Prefer regions with at least 3 cells; at most one region may have 2 cells.',
-    `Return only JSON: {"rows": ["..."]}, exactly ${size} strings of ${size} digits (0..${size - 1}), no spaces.`,
-  ].join('\n');
-}
+// 축약(설계 §5·§14): 크기는 요청마다 바뀌므로 system이 아니라 user 메시지의 {size}에만 둔다.
+const QUEENS_PROPOSAL_PROMPT = [
+  'Propose varied connected color regions around the fixed queens of the requested grid; code will finish the puzzle.',
+  'Every region contains exactly one given queen; keep the queens in place. Prefer regions with at least 3 cells; at most one region may have 2 cells.',
+  'Each row is one string of single-digit region IDs, one ID per cell and no spaces, sized to the requested grid.',
+].join('\n');
 
 // A missing region is a semantic defect, not a malformed matrix; it can still seed growth.
 // size <= 9: region IDs are 0..8, and the final check is Number(char) < size.
@@ -113,7 +111,7 @@ export function createQueensGenerator(model: CompletionGateway, options: Generat
       const modelDeadline = AbortSignal.timeout(MODEL_TIMEOUT_MS);
       const modelSignal = AbortSignal.any([requestSignal, modelDeadline]);
       const response = await propose(model, [
-        { role: 'system', content: systemPrompt(size) },
+        { role: 'system', content: QUEENS_PROPOSAL_PROMPT },
         { role: 'user', content: JSON.stringify({ size, queens: solution }) },
       ], modelSignal);
       halted = interrupted();

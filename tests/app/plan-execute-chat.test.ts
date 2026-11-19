@@ -25,7 +25,7 @@ describe('Given Plan and Execute with a ReAct executor', () => {
           : answer({ type: 'message', content: '단계 완료' });
       }
       return answer({ type: 'tool_call', name: 'get_current_weather', arguments: { city: 'unplanned' } });
-    } }, [{ definition, execute: async () => { executions++; return { ok: true, value: {} }; } }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => { executions++; return { ok: true, value: {} }; } }]);
     assert.equal((await chat.complete([{ role: 'user', content: '기온 확인' }])).ok, false);
     assert.equal(executions, 8);
     assert.equal(calls, 15);
@@ -51,7 +51,7 @@ describe('Given Plan and Execute with a ReAct executor', () => {
       assert.equal(results[0].observations[0].result.value.temperature_c, 10);
       assert.equal(results[1].observations[0].result.value.temperature_c, 15);
       return answer({ type: 'message', content: '부산이 5°C 높습니다.' });
-    } }, [{ definition, execute: async (args) => {
+    } }, [{ definition, effect: 'read' as const, execute: async (args) => {
       const city = (args as { city: string }).city;
       cities.push(city);
       return { ok: true, value: { temperature_c: city === 'Seoul,KR' ? 10 : 15 } };
@@ -71,7 +71,7 @@ describe('Given Plan and Execute with a ReAct executor', () => {
       if (calls === 1) return answer(plan);
       if (calls === 2 || calls === 4) return answer({ type: 'tool_call', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } });
       return answer({ type: 'message', content: '조회 완료' });
-    } }, [{ definition, execute: async () => { executions++; return { ok: true, value: { temperature_c: 10 } }; } }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => { executions++; return { ok: true, value: { temperature_c: 10 } }; } }]);
     assert.equal((await chat.complete([{ role: 'user', content: '온도 조회' }])).ok, true);
     assert.equal(executions, 1);
   });
@@ -83,7 +83,7 @@ describe('Given Plan and Execute with a ReAct executor', () => {
       calls++;
       if (calls === 1) return answer({ ...plan, steps: [plan.steps[0]] });
       return answer({ type: 'tool_call', name: 'get_current_weather', arguments: { city: 'Seoul,KR' } });
-    } }, [{ definition, execute: async () => { executions++; return { ok: true, value: {} }; } }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => { executions++; return { ok: true, value: {} }; } }]);
     const result = await chat.complete([{ role: 'user', content: '날씨' }]);
     assert.equal(result.ok, false);
     assert.ok(calls <= 16);
@@ -100,8 +100,24 @@ describe('Given Plan and Execute with a ReAct executor', () => {
       if (calls === 3) return answer({ type: 'message', content: '조회 실패' });
       assert.equal(JSON.parse(messages.at(-1)!.content).results[0].result.ok, false);
       return answer({ type: 'message', content: '날씨를 조회하지 못했습니다.' });
-    } }, [{ definition, execute: async () => ({ ok: false, reason: '날씨 서비스 오류' }) }]);
+    } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: false, reason: '날씨 서비스 오류' }) }]);
     assert.equal((await chat.complete([{ role: 'user', content: '날씨' }], (step) => progress.push(step))).ok, true);
     assert.ok(progress.some((step) => step.kind === 'execution' && step.status === 'failed'));
+  });
+
+  it('When separate requests run Then the system prompt and tool definitions are byte-identical', async () => {
+    const systems: string[] = [];
+    for (const question of ['서울 부산 비교', '대구 날씨 알려줘']) {
+      let first = true;
+      const chat = createPlanExecuteChat({ complete: async (messages) => {
+        if (first) { systems.push(messages[0]!.content); first = false; }
+        return answer({ ...plan, steps: [] });
+      } }, [{ definition, effect: 'read' as const, execute: async () => ({ ok: true, value: {} }) }]);
+      await chat.complete([{ role: 'user', content: question }]);
+    }
+    assert.equal(systems.length, 2);
+    assert.equal(systems[0], systems[1]); // ① 시스템 + ② 도구 정의 직렬화가 요청 간 바이트 단위로 같다
+    assert.ok(systems[0]!.includes(definition.name));
+    assert.ok(!systems[0]!.includes('Return JSON')); // 응답 형식은 json_schema가 강제한다
   });
 });
