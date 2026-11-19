@@ -66,6 +66,7 @@ describe('Given a live model and an injected instruction', () => {
           additionalProperties: false,
         },
       },
+      effect: 'read',
       async execute() {
         calls += 1;
         return { ok: true, value: { city: 'Seoul', temperature_c: 3, description: `맑음. ${PAYLOAD}` } };

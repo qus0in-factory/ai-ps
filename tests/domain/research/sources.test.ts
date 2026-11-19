@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractSources, type ResearchStep } from '../../../src/domain/research/sources.ts';
+import { extractSources, stripForeignLinks, type ResearchStep } from '../../../src/domain/research/sources.ts';
 
 describe('Given the research steps recorded during the agent loop', () => {
   it('When extracting sources Then only successful read_webpage URLs survive, in order, without duplicates', () => {
@@ -27,5 +27,17 @@ describe('Given the research steps recorded during the agent loop', () => {
   it('When there are no steps or no successful reads Then sources are empty', () => {
     assert.deepEqual(extractSources([]), []);
     assert.deepEqual(extractSources([{ tool: 'search_web', args: { query: 'x' }, ok: true }]), []);
+  });
+
+  it('When a report links outside the search and read URLs Then those links become plain text', () => {
+    const report = '[공식](https://example.com/a#section) [낯선](https://evil.test/x) [검색](https://example.com/hit)';
+    assert.equal(
+      stripForeignLinks(report, ['https://example.com/a', 'https://example.com/hit']),
+      '[공식](https://example.com/a#section) 낯선 [검색](https://example.com/hit)',
+    );
+  });
+
+  it('When no URL is allowed Then every markdown link is unwrapped', () => {
+    assert.equal(stripForeignLinks('[하나](https://a.test) [둘](https://b.test)', []), '하나 둘');
   });
 });

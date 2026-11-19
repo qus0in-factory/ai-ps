@@ -51,6 +51,12 @@ describe('Given the /research agent needs two web tools', () => {
     assert.match(text, /2\. 두 번째 글/);
   });
 
+  it('When a search summary is long Then the model receives at most 300 characters of it', () => {
+    const text = formatSearchResults([{ title: '긴 글', url: 'https://example.com/long', summary: '가'.repeat(500) }]);
+    assert.ok(text.includes('요약: ' + '가'.repeat(300)));
+    assert.ok(!text.includes('가'.repeat(301)));
+  });
+
   it('When a search returns no hits Then the model gets a no-results phrase, not an empty string', () => {
     assert.equal(formatSearchResults([]), '검색 결과가 없습니다. 다른 검색어로 다시 시도해보세요.');
   });

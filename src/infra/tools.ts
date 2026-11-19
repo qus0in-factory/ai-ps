@@ -22,6 +22,7 @@ export function createTools(
         additionalProperties: false,
       },
     },
+    effect: 'read',
     async execute(args) {
       if (!args || typeof args !== 'object' || !('city' in args) ||
           typeof args.city !== 'string' || !args.city.trim()) {
@@ -73,6 +74,7 @@ export function createTools(
       description: 'Get the current date and time in Asia/Seoul (Korean Standard Time), along with UTC. Call this when the user asks for the current time or date.',
       parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
     },
+    effect: 'read',
     async execute() {
       try {
         const date = now();

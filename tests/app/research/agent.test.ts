@@ -114,9 +114,9 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     assert.deepEqual(tools.searchCalls, [{ query: '엣지', maxResults: 5 }]);
     assert.deepEqual(tools.readCalls, ['https://example.com/1', 'https://example.com/2']);
     assert.deepEqual(calls[1]!.messages.slice(-3), [
-      { role: 'tool', tool_call_id: 's1', content: '1. 첫 결과\n   주소: https://example.com/a\n   요약: 첫 요약' },
-      { role: 'tool', tool_call_id: 'r1', content: '페이지 본문' },
-      { role: 'tool', tool_call_id: 'r2', content: '페이지 본문' },
+      { role: 'tool', tool_call_id: 's1', content: '<untrusted kind="search_result">\n1. 첫 결과\n   주소: https://example.com/a\n   요약: 첫 요약\n</untrusted>' },
+      { role: 'tool', tool_call_id: 'r1', content: '<untrusted kind="web_page">\n페이지 본문\n</untrusted>' },
+      { role: 'tool', tool_call_id: 'r2', content: '<untrusted kind="web_page">\n페이지 본문\n</untrusted>' },
     ]);
   });
 
@@ -143,7 +143,8 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     assert.match(toolMessages[0]!.content, /다시 시도해보세요/);
     assert.match(toolMessages[1]!.content, /다른 페이지를 시도해보세요/);
     assert.match(toolMessages[2]!.content, /read_webpage/);
-    assert.equal(toolMessages[3]!.content, '검색 결과가 없습니다. 다른 검색어로 다시 시도해보세요.');
+    assert.match(toolMessages[3]!.content, /검색 결과가 없습니다\./);
+    assert.match(toolMessages[3]!.content, /<untrusted kind="search_result">/);
     if (outcome.ok) {
       assert.equal(outcome.value.steps.length, 3);
       assert.equal(outcome.value.steps.filter((step) => step.ok).length, 1);
@@ -196,7 +197,9 @@ describe('Given the research agent with a scripted model and fake tools', () => 
     const toolMessage = calls[1]!.messages.at(-1);
     assert.equal(toolMessage?.role, 'tool');
     const content = String((toolMessage as { content: string } | undefined)?.content);
-    assert.ok(content.startsWith('긴'.repeat(4000)));
+    assert.ok(content.includes('긴'.repeat(4000)));
+    assert.ok(!content.includes('긴'.repeat(4001)));
+    assert.ok(content.endsWith('</untrusted>'));
     assert.ok(content.length < 4100);
   });
 
@@ -221,6 +224,25 @@ describe('Given the research agent with a scripted model and fake tools', () => 
       if (!outcome.ok) assert.match(outcome.reason, /1~200자/);
     }
     assert.equal(calls.length, 0);
+  });
+
+  it('When the report links to an unverified URL Then the final report unwraps only that link', async () => {
+    const { model } = fakeModel([
+      { ok: true, value: { role: 'assistant', content: null, tool_calls: [
+        { id: 'r1', type: 'function', function: { name: 'read_webpage', arguments: '{"url":"https://example.com/1"}' } },
+      ] } },
+      { ok: true, value: text('노트: 사실 (https://example.com/1)') },
+      { ok: true, value: text('## 개요\n[확인](https://example.com/1) [낯선](https://evil.test/x)') },
+      { ok: true, value: text('{"passed":true,"problems":[]}') },
+    ]);
+    const tools = fakeTools();
+    const outcome = await createResearchAgent({ model, search: tools.search, read: tools.read }).run('주제');
+    assert.equal(outcome.ok, true);
+    if (outcome.ok) {
+      assert.match(outcome.value.report, /\[확인\]\(https:\/\/example\.com\/1\)/);
+      assert.ok(outcome.value.report.includes('낯선'));
+      assert.ok(!outcome.value.report.includes('https://evil.test/x'));
+    }
   });
 
   it('When the evaluator fails the first draft Then rewrites the report at most once with the problems and re-evaluates', async () => {

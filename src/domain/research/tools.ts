@@ -42,7 +42,7 @@ export const READ_WEBPAGE_TOOL: ToolDefinition = {
 export function formatSearchResults(hits: SearchHit[]): string {
   if (!hits.length) return '검색 결과가 없습니다. 다른 검색어로 다시 시도해보세요.';
   return hits.map((hit, index) =>
-    `${index + 1}. ${hit.title || hit.url}\n   주소: ${hit.url}\n   요약: ${hit.summary || '요약이 없습니다.'}`).join('\n');
+    `${index + 1}. ${hit.title || hit.url}\n   주소: ${hit.url}\n   요약: ${(hit.summary || '요약이 없습니다.').slice(0, 300)}`).join('\n');
 }
 
 /** 페이지 본문이 길면 WEBPAGE_CHAR_LIMIT에서 자르고 생략 안내를 붙인다. */

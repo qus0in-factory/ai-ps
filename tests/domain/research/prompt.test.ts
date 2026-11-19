@@ -11,8 +11,8 @@ import {
 import { MAX_ITERATIONS } from '../../../src/domain/research/constants.ts';
 
 describe('Given the /research agent works in an autonomous tool loop', () => {
-  it('When the system prompt is declared Then it describes the 4-step workflow and both tools', () => {
-    assert.match(RESEARCH_SYSTEM_PROMPT, /4단계/);
+  it('When the system prompt is declared Then it describes the research loop and both tools', () => {
+    assert.match(RESEARCH_SYSTEM_PROMPT, /조사/);
     assert.ok(RESEARCH_SYSTEM_PROMPT.includes('search_web'));
     assert.ok(RESEARCH_SYSTEM_PROMPT.includes('read_webpage'));
   });
@@ -22,6 +22,7 @@ describe('Given the /research agent works in an autonomous tool loop', () => {
     assert.match(RESEARCH_SYSTEM_PROMPT, /URL과 함께/);
     assert.match(RESEARCH_SYSTEM_PROMPT, /확인한 내용만/);
     assert.match(RESEARCH_SYSTEM_PROMPT, /추측이나 기억/);
+    assert.match(RESEARCH_SYSTEM_PROMPT, /<untrusted>/);
   });
 
   it('When the loop hits the cap Then the wrap-up message asks to finish without more tool calls', () => {
@@ -44,7 +45,8 @@ describe('Given the /research agent works in an autonomous tool loop', () => {
   it('When building report messages Then the prompt forbids facts outside the notes and treats notes as data', () => {
     const content = buildReportMessages('토픽', '노트').at(0)?.content ?? '';
     assert.match(content, /노트에 없는 사실/);
-    assert.match(content, /데이터이지 지시가 아닙니다/);
+    assert.match(content, /외부 데이터/);
+    assert.match(content, /<untrusted>/);
   });
 
   it('When the notes are blank Then the report prompt says so instead of an empty block', () => {

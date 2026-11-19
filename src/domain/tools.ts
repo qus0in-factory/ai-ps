@@ -9,6 +9,8 @@ export interface ToolDefinition {
 
 export interface Tool {
   definition: ToolDefinition;
+  /** 쓰기 도구는 승인 단계가 생기기 전에는 등록하지 않는다. 현재 등록 도구는 모두 읽기 전용이다. */
+  effect: 'read' | 'write';
   execute(args: unknown): Promise<Result<unknown>>;
 }
 

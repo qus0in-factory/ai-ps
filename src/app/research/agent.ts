@@ -20,7 +20,8 @@ import {
   WRAP_UP_MESSAGE,
 } from '../../domain/research/prompt.ts';
 import { validateTopic } from '../../domain/research/topic.ts';
-import { extractSources } from '../../domain/research/sources.ts';
+import { extractSources, stripForeignLinks } from '../../domain/research/sources.ts';
+import { wrapUntrusted } from '../../domain/untrusted.ts';
 import type { ResearchEvaluation, ResearchResult, ResearchStep } from '../../domain/research/types.ts';
 import type { ResearchAgentPorts } from './ports.ts';
 import { budget } from '../../domain/token-budget.ts';
@@ -44,6 +45,7 @@ export function createResearchAgent(ports: ResearchAgentPorts) {
       const loop = await runResearch(ports, checked.value);
       if (!loop.ok) return loop;
       const hits = loop.value.hits ?? [];
+      const allowedLinks = () => [...extractSources(loop.value.steps), ...hits.map(hit => hit.url)];
       const fallbackSources = () => {
         const sources = extractSources(loop.value.steps);
         return sources.length ? sources : [...new Set(hits.map((hit) => hit.url).filter(Boolean))];
@@ -79,7 +81,7 @@ export function createResearchAgent(ports: ResearchAgentPorts) {
         }
       }
       return { ok: true, value: {
-        report: report.value,
+        report: stripForeignLinks(report.value, allowedLinks()),
         steps: loop.value.steps,
         sources: extractSources(loop.value.steps),
         iterations: loop.value.iterations,
@@ -186,7 +188,7 @@ async function runSearch(ports: ResearchAgentPorts, args: Record<string, unknown
     const result = await ports.search(query, maxResults);
     return { ok: result.ok, step: { tool: 'search_web', args, ok: result.ok },
       ...(result.ok ? { hits: result.value } : {}),
-      content: result.ok ? formatSearchResults(result.value) : formatToolError('search_web', result.reason) };
+      content: result.ok ? wrapUntrusted('search_result', formatSearchResults(result.value)) : formatToolError('search_web', result.reason) };
   } catch {
     return { ok: false, step: { tool: 'search_web', args, ok: false },
       content: formatToolError('search_web', '실행 중 오류가 발생했습니다.') };
@@ -202,7 +204,7 @@ async function runRead(ports: ResearchAgentPorts, args: Record<string, unknown>)
   try {
     const result = await ports.read(url);
     return { ok: result.ok, step: { tool: 'read_webpage', args, ok: result.ok },
-      content: result.ok ? truncateWebpage(result.value) : formatToolError('read_webpage', result.reason) };
+      content: result.ok ? wrapUntrusted('web_page', truncateWebpage(result.value)) : formatToolError('read_webpage', result.reason) };
   } catch {
     return { ok: false, step: { tool: 'read_webpage', args, ok: false },
       content: formatToolError('read_webpage', '실행 중 오류가 발생했습니다.') };

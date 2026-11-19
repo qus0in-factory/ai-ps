@@ -6,6 +6,15 @@ import { createTools } from '../../src/infra/tools.ts';
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/openweather.json', import.meta.url), 'utf8'));
 
 describe('Given the OpenWeather tool registry', () => {
+  it('When inspecting the registered tools Then every tool is read-only', () => {
+    const tools = createTools({ apiKey: 'test-key', queens: {
+      validatePuzzle: () => ({} as never),
+      validatePlacement: () => ({} as never),
+    } });
+    assert.equal(tools.length, 4);
+    assert.deepEqual(tools.map((tool) => tool.effect), ['read', 'read', 'read', 'read']);
+  });
+
   it('When requesting city weather Then geocodes and fetches metric Korean weather', async () => {
     const requests: URL[] = [];
     const fetcher: typeof fetch = async (input) => {

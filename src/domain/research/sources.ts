@@ -13,3 +13,20 @@ export function extractSources(steps: ResearchStep[]): string[] {
   }
   return sources;
 }
+
+function withoutFragment(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    return parsed.href;
+  } catch {
+    return url;
+  }
+}
+
+/** 보고서의 링크 중 검색·읽기로 확인하지 않은 주소는 링크를 풀어 글자만 남긴다. */
+export function stripForeignLinks(report: string, allowedUrls: readonly string[]): string {
+  const allowed = new Set(allowedUrls.map(withoutFragment));
+  return report.replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g, (whole, label: string, url: string) =>
+    allowed.has(withoutFragment(url)) ? whole : label);
+}

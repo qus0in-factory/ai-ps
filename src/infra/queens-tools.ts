@@ -16,6 +16,7 @@ export function createQueensTools(queens: QueensOperations): Tool[] {
       description: 'Validate a LinkedIn Queens puzzle: N×N grid, exactly N orthogonally connected color regions, and exactly one solution using bounded backtracking. One queen per row, column and region; no touching, including diagonals. If non-unique, returns two distinct solutions in the error message. Coordinates start at 0. Never claim uniqueness without this tool.',
       parameters: { type: 'object', properties: puzzleProperties, required: ['size', 'regions'], additionalProperties: false },
     },
+    effect: 'read',
     async execute(args) { return { ok: true, value: queens.validatePuzzle(args) }; },
   }, {
     definition: {
@@ -28,6 +29,7 @@ export function createQueensTools(queens: QueensOperations): Tool[] {
         }, required: ['row', 'column'], additionalProperties: false },
       } }, required: ['size', 'regions', 'queens'], additionalProperties: false },
     },
+    effect: 'read',
     async execute(args) {
       const positions = args && typeof args === 'object' && 'queens' in args ? args.queens : undefined;
       return { ok: true, value: queens.validatePlacement(args, positions) };
