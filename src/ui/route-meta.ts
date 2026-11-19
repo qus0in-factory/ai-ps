@@ -4,7 +4,7 @@ export interface RouteMeta {
   description?: string;
 }
 
-const SITE = 'ai-ps';
+const SITE = '에이전트 문제 해결';
 
 // '/' 와 알 수 없는 경로는 설명을 비워 두어 index.html 의 기본 태그(og.json 생성물)를 그대로 쓴다.
 export const ROUTE_META: Record<string, RouteMeta> = {

@@ -1,9 +1,9 @@
 {
   "site": {
-    "metaDescription": "「잿빛 등대」 텍스트 어드벤처, Queens 퍼즐 생성, 일본어 회화 연습, 자동 리서치 에이전트, AI 에이전트 실습을 담은 ai-ps.",
-    "ogTitle": "ai-ps · AI 에이전트 실습",
+    "metaDescription": "「잿빛 등대」 텍스트 어드벤처, Queens 퍼즐 생성, 일본어 회화 연습, 자동 리서치 에이전트, AI 에이전트 실습을 담은 에이전트 문제 해결.",
+    "ogTitle": "에이전트 문제 해결 · AI 에이전트 실습",
     "ogDescription": "잿빛 등대 어드벤처, Queens 퍼즐, 일본어 회화 연습, 자동 리서치 에이전트를 담은 AI 에이전트 실습.",
-    "imageAlt": "ai-ps 소개 이미지 — 잿빛 등대, Queens, 일본어 회화 튜터, 자동 리서치 에이전트"
+    "imageAlt": "에이전트 문제 해결 소개 이미지 — 잿빛 등대, Queens, 일본어 회화 튜터, 자동 리서치 에이전트"
   },
   "background": "#0B1026",
   "image": {

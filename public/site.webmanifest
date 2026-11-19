@@ -1,6 +1,6 @@
 {
-  "name": "ai-ps",
-  "short_name": "ai-ps",
+  "name": "에이전트 문제 해결",
+  "short_name": "에이전트 문제 해결",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

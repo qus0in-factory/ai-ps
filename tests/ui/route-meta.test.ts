@@ -13,18 +13,18 @@ function fakeDocument(): MetaDocument & { tags: Record<string, { content: string
     getAttribute: () => tag.content,
     setAttribute: (_name: string, value: string) => { tag.content = value; },
   }]));
-  return { title: 'ai-ps', tags, querySelector: (selector: string) => elements[selector] ?? null };
+  return { title: '에이전트 문제 해결', tags, querySelector: (selector: string) => elements[selector] ?? null };
 }
 
 describe('Given the route meta table', () => {
   it('When looking up a route Then returns its title and tolerates a trailing slash', () => {
-    assert.equal(metaFor('/stats').title, '사용량 · ai-ps');
-    assert.equal(metaFor('/chat/').title, 'Chat · ai-ps');
-    assert.equal(metaFor('/').title, 'ai-ps');
+    assert.equal(metaFor('/stats').title, '사용량 · 에이전트 문제 해결');
+    assert.equal(metaFor('/chat/').title, 'Chat · 에이전트 문제 해결');
+    assert.equal(metaFor('/').title, '에이전트 문제 해결');
   });
 
   it('When the path is unknown Then falls back to the site title', () => {
-    assert.equal(metaFor('/nope').title, 'ai-ps');
+    assert.equal(metaFor('/nope').title, '에이전트 문제 해결');
   });
 
   it('When every App route is checked Then each has its own meta entry', () => {
@@ -55,7 +55,7 @@ describe('Given a document', () => {
     const doc = fakeDocument();
     applyRouteMeta(doc, '/talk');
     applyRouteMeta(doc, '/');
-    assert.equal(doc.title, 'ai-ps');
+    assert.equal(doc.title, '에이전트 문제 해결');
     assert.equal(doc.tags['meta[name="description"]']!.content, '기본 설명');
     assert.equal(doc.tags['meta[property="og:title"]']!.content, '기본 og 제목');
     assert.equal(doc.tags['meta[property="og:description"]']!.content, '기본 og 설명');
@@ -64,6 +64,6 @@ describe('Given a document', () => {
   it('When tags are missing Then only the title changes without throwing', () => {
     const doc: MetaDocument = { title: '', querySelector: () => null };
     applyRouteMeta(doc, '/chat');
-    assert.equal(doc.title, 'Chat · ai-ps');
+    assert.equal(doc.title, 'Chat · 에이전트 문제 해결');
   });
 });
