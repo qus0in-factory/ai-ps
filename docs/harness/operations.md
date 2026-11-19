@@ -11,6 +11,7 @@
 - 세션 시작 시 [배치 규칙](agents.md#배치-규칙) 순서로 자기 패널 라벨과 기존 워커 목록을 확인한다. 현재는 라벨 스크립트와 `herdr agent list`·`herdr pane list`를 사용한다.
 - 검증된 상태줄 기준은 OpenCode 2.3.2와 Codex 0.170이다. Claude Code는 모델 선택 방식이 다르므로 현재 스크립트의 Claude 분기를 따른다. CLI를 올린 뒤 자동 열기가 실패하면 현재 패널의 상태줄을 확인해 수동으로 열고, 모델을 선택해 라벨을 붙인다. 스크립트 수정은 별도 패치로 기록한다.
 - 열기: `scripts/herdr-open-worker.sh <ps-이름> <codex|claude|opencode> <model> [effort] [옵션]`. 기본은 새 탭이고, 같은 이름이 `herdr agent list`에 있으면 열지 않는다. `--split-of <pane>`는 사용자가 "같은 탭에"라고 말할 때만 쓴다. effort 기본값은 codex·claude가 high, opencode는 variant 목록이 보일 때만 쓴다. `--model-label '<문구>'`는 화면에 보이는 모델 표기다(slug와 다를 때). `--dry-run`으로 명령·키 순서를 먼저 확인한다.
+- 열기 스크립트가 지원하지 않는 CLI(grok·agy)는 `herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd <저장소> --label <ps-이름>`으로 연다. `--workspace` 없이 만들면 포커스된 워크스페이스에 탭이 생긴다(2026-11-19 w2Q에 생성). 연 뒤 `herdr agent list`에서 `workspace_id`를 확인한다.
 - OpenCode 모델 선택: 실행 후 `/models` → 검색어 → enter → variant를 화면 폴링으로 진행한다. 같은 이름이 두 공급자에 있으므로 `--provider '<문구>'`로 공급자 줄을 지정한다(ps-ds는 Ollama Cloud, ps-hf는 OpenCode Go). 끝나면 상태줄에 모델명(effort는 `· high` 접미)이 보이는지 `--expect`로 확인한다.
 - OpenCode 기본 모델(Beam Free)을 그대로 쓰는 워커는 `--keep-model`로 연다(예: `scripts/herdr-open-worker.sh ps-beam opencode beam-free --keep-model --model-label 'Beam Free'`). `/models`를 건너뛰고 상태줄만 확인한 뒤 라벨링한다. effort·`--provider`는 확인 조건일 뿐 설정이 아니다.
 - 상태줄 판정: OpenCode 2.3.2·Codex 0.170에서는 마지막 줄이 아니라 OpenCode는 `Build` 포함 줄, Codex는 경로(`~/`)·중간점(`·`) 표기가 있는 줄을 보고, OpenCode 첫 실행 대기는 60초다(`herdr_status_line`·`herdr_wait_for`; 근거 `/tmp/ps-beam-herdr.md`).
@@ -41,6 +42,8 @@
 ## Cloudflare Workers 배포
 - **Workers 런타임 검증**. Node 테스트에서 통과한 fetch 옵션도 workerd에서 실패할 수 있다. `redirect: 'error'`는 요청 전 TypeError를 내서 5.3.0·5.3.1의 리서치 검색을 막았다. `pnpm test`의 `tests/arch/workers-fetch-options.test.ts`가 `src/infra` 옵션 리터럴을 검사한다. `src/infra`의 Workers 실행 경로, `wrangler.jsonc` 또는 호환 날짜를 바꾸면 대상 경로를 로컬 workerd로 검증하고 Discord 검증란에 남긴다. 공통 어댑터용 workerd 회귀 테스트는 별도 작업이다. [옵션 호환 표](../providers.md#workers-fetch-호환-표)
 - **운영 Research 확인**. 리서치 공급자나 인프라를 바꾼 배포 후 총괄이 사용자에게 운영 화면에서 주제 한 건을 실행해 달라고 요청한다. 결과의 `steps`에서 `search_web` 성공 여부를 기록한다. 비용과 소요 시간을 고려해 기본 GET 스모크와 별도로 수행한다.
+- **커스텀 도메인**. 운영 주소는 `aips.qus0in.dev`와 workers.dev 둘이다. `wrangler.jsonc`에 `routes`를 두면 workers.dev가 기본 비활성이 되므로 `workers_dev: true`를 함께 적는다. 2026-11-19 9.8.0에서 workers.dev 주소가 1042 오류를 냈다. 배포 후 두 주소를 모두 확인한다(`pnpm smoke`와 `pnpm smoke https://aips.qus0in.dev`).
+- **배포 설정 변경**. `routes`·`triggers`·바인딩처럼 `wrangler deploy` 출력이 달라지는 설정을 바꾸면 배포 전에 `tests/scripts/release-tools.test.ts`에 새 출력 예시를 추가한다. 2026-11-19 custom domain 출력을 파서가 읽지 못했다.
 - 배포는 총괄(`ps-opus`)만 한다. 워커는 배포하지 않는다.
 - 릴리스와 이어 하는 빠른 경로: 리뷰 게이트 → `pnpm release <버전>`(test·typecheck·build·태그 푸시) → `pnpm run deploy --skip-build` → workers.dev URL과 GET 스모크 확인 → Discord 보고. 별도 사전 build를 반복하지 않는다. 이미 검증·빌드를 마친 뒤 배포하는 다른 절차에서도 `--skip-build`를 사용하되, 빌드 이후 소스를 바꾸었다면 다시 빌드한다.
 - `pnpm run deploy`(`scripts/deploy.mjs`)가 build 1회 → 앱 키 secret 동기화 → `wrangler deploy` → URL·Version 파싱 → GET 스모크까지 이어 한다. 수동 `wrangler secret bulk`는 쓰지 않는다. `--skip-build`·`--skip-secrets`·`--dry-run` 지원. 첫 배포(Worker 미존재)로 `wrangler secret list`가 실패하면 원격 키 비교만 건너뛴다.
