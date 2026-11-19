@@ -402,10 +402,11 @@ describe('Given a completion gateway with decisions routing', () => {
     assert.equal(decision!.model, 'gpt-6-luna');
     assert.equal(decision!.input, '서울과 부산 기온 비교');
     assert.deepEqual(decision!.questions, [{
-      type: 'choice', name: 'route', instructions: '이 요청에 답할 모델을 고른다.',
+      type: 'choice', name: 'route',
+      instructions: '사용자 요청 하나를 읽고 필요한 추론의 깊이로 분류한다. 한 번에 바로 답하거나 조회 한 번으로 끝나면 luna, 여러 요소를 비교·종합하거나 단계를 세워야 답할 수 있으면 terra다. 답의 길이가 아니라 추론 단계 수로 판단한다.',
       choices: [
-        { value: 'luna', description: '인사, 단순 사실, 한 단계 질문, 도구 1회로 끝나는 요청' },
-        { value: 'terra', description: '여러 단계 추론, 비교, 계획, 긴 글 작성' },
+        { value: 'luna', description: '인사·감사, 단일 사실·정의·계산 하나, 현재 시각이나 한 도시의 날씨처럼 조회 한 번으로 끝나는 요청' },
+        { value: 'terra', description: '둘 이상의 대상 비교·분석·추천, 계획·일정·단계 분해, 요약과 인사이트 도출, 글 다듬기·작성, 코드 분석·개선처럼 여러 단계의 추론이 필요한 요청' },
       ],
     }]);
     assert.equal(generated!.model, 'terra-model');
@@ -416,7 +417,7 @@ describe('Given a completion gateway with decisions routing', () => {
     let generated: Record<string, unknown> | undefined;
     const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
       fetcher: async (url, init) => String(url).endsWith('/decisions')
-        ? (decisions++, terraAnswer(0.69))
+        ? (decisions++, terraAnswer(0.59))
         : (generated = JSON.parse(String(init!.body)), okCompletion()),
     });
     assert.equal((await model.complete(messages)).ok, true);
@@ -478,5 +479,54 @@ describe('Given a completion gateway with decisions routing', () => {
     });
     assert.equal((await model.complete(messages)).ok, true);
     assert.deepEqual(models, ['terra-model', 'base-model']);
+  });
+
+  it('When the routing keys exclude this call site Then the decisions endpoint is not called', async () => {
+    const urls: string[] = [];
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test',
+      routing: { complexModel: 'terra-model', keys: ['ai-ps:chatPlan'] },
+      fetcher: async (url) => { urls.push(String(url)); return okCompletion(); },
+    });
+    assert.equal((await model.complete(messages, { prompt_cache_key: 'ai-ps:chatStep' })).ok, true);
+    assert.deepEqual(urls, ['https://api.openai.com/v1/chat/completions']);
+  });
+
+  it('When the last user message is a wrapped internal result Then the preceding question is classified', async () => {
+    let input: unknown;
+    const model = createOpenAICompletion({ model: 'base-model', apiKey: 'test', routing: { complexModel: 'terra-model' },
+      fetcher: async (url, init) => {
+        if (String(url).endsWith('/decisions')) {
+          input = JSON.parse(String(init!.body)).input;
+          return terraAnswer();
+        }
+        return okCompletion();
+      },
+    });
+    const result = await model.complete([
+      { role: 'system', content: '고정 지시' },
+      { role: 'user', content: '서울과 부산 기온 비교' },
+      { role: 'user', content: '<untrusted kind="tool_result">\n{"type":"execution_results"}\n</untrusted>' },
+    ]);
+    assert.equal(result.ok, true);
+    assert.equal(input, '서울과 부산 기온 비교');
+  });
+
+  it('When a generation falls back Then the retry goes through the shared client fetcher', async () => {
+    const urls: string[] = [];
+    let completions = 0;
+    const client = createOpenAIClient({ apiKey: 'test', baseUrl: 'https://shared.test/v1', fetcher: async (url, init) => {
+      urls.push(String(url));
+      if (String(url).endsWith('/decisions')) return terraAnswer();
+      return ++completions === 1 ? new Response('boom', { status: 500 }) : okCompletion();
+    } });
+    const model = createOpenAICompletion({ client, model: 'base-model', logErrors: false,
+      routing: { complexModel: 'terra-model' },
+    });
+    assert.equal((await model.complete(messages)).ok, true);
+    assert.deepEqual(urls, [
+      'https://shared.test/v1/decisions',
+      'https://shared.test/v1/chat/completions',
+      'https://shared.test/v1/chat/completions',
+    ]);
   });
 });

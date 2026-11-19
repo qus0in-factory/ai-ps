@@ -10,21 +10,22 @@ const logger = createConsoleLogger();
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const OPENAI_TIMEOUTS = { completion: 60_000, transcription: 30_000, speech: 30_000 } as const;
 const INVALID_RESPONSE_FORMAT_REASON = '구조화 응답은 json_schema(strict)만 지원합니다.';
-const ROUTE_THRESHOLD = 0.7;
+const ROUTE_THRESHOLD = 0.6;
 const ROUTE_TIMEOUT_MS = 2_000;
 const ROUTE_SKIP_MS = 60_000;
 const DECISION_REQUEST = {
   model: 'gpt-6-luna',
   questions: [{
-    type: 'choice', name: 'route', instructions: '이 요청에 답할 모델을 고른다.',
+    type: 'choice', name: 'route',
+    instructions: '사용자 요청 하나를 읽고 필요한 추론의 깊이로 분류한다. 한 번에 바로 답하거나 조회 한 번으로 끝나면 luna, 여러 요소를 비교·종합하거나 단계를 세워야 답할 수 있으면 terra다. 답의 길이가 아니라 추론 단계 수로 판단한다.',
     choices: [
-      { value: 'luna', description: '인사, 단순 사실, 한 단계 질문, 도구 1회로 끝나는 요청' },
-      { value: 'terra', description: '여러 단계 추론, 비교, 계획, 긴 글 작성' },
+      { value: 'luna', description: '인사·감사, 단일 사실·정의·계산 하나, 현재 시각이나 한 도시의 날씨처럼 조회 한 번으로 끝나는 요청' },
+      { value: 'terra', description: '둘 이상의 대상 비교·분석·추천, 계획·일정·단계 분해, 요약과 인사이트 도출, 글 다듬기·작성, 코드 분석·개선처럼 여러 단계의 추론이 필요한 요청' },
     ],
   }],
 } as const;
 
-interface RoutingConfig { complexModel: string; threshold?: number }
+interface RoutingConfig { complexModel: string; threshold?: number; keys?: string[] }
 
 export interface OpenAIUsageRecord {
   op: 'realtime';
@@ -139,17 +140,25 @@ export async function completion(
 /** 분류는 생성 직전 1회. 어떤 실패도 생성 실패로 번지지 않고 기본 모델을 쓴다. */
 async function routeCompletionModel(
   routing: RoutingConfig | undefined, messages: CompletionMessage[], client: OpenAIClient,
-  signal: AbortSignal | undefined, skipUntil: { value: number },
+  signal: AbortSignal | undefined, skipUntil: { value: number }, cacheKey: string | undefined,
 ): Promise<string | undefined> {
   const complex = routing?.complexModel?.trim();
   if (!complex || Date.now() < skipUntil.value) return undefined;
+  if (routing?.keys && (!cacheKey || !routing.keys.includes(cacheKey))) return undefined;
   const apiKey = client.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey?.trim()) return undefined;
+  // 내부 JSON(wrapUntrusted·assigned_task)이 아니라 사용자의 실제 질문만 분류한다.
+  const question = [...messages].reverse().find(message => {
+    if (message.role !== 'user') return false;
+    const content = message.content?.trimStart() ?? '';
+    return !content.startsWith('<untrusted') && !content.startsWith('{');
+  });
+  if (!question) return undefined;
   const skip = () => { skipUntil.value = Date.now() + ROUTE_SKIP_MS; };
   try {
     const timeout = AbortSignal.timeout(ROUTE_TIMEOUT_MS);
     const routeSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    const input = [...messages].reverse().find(message => message.role === 'user')?.content?.slice(0, 2_000) ?? '';
+    const input = question.content?.slice(0, 2_000) ?? '';
     const response = await client.fetcher(client.url('/decisions'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -202,13 +211,13 @@ export function createOpenAICompletion(
       const callOptions = {
         client, debugErrors: config.debugErrors, logErrors: config.logErrors, signal: settings.signal, timeoutMs: settings.timeoutMs,
       };
-      const selected = await routeCompletionModel(config.routing, messages, client, settings.signal, skipUntil) ?? model;
+      const selected = await routeCompletionModel(config.routing, messages, client, settings.signal, skipUntil, settings.prompt_cache_key) ?? model;
       let result = await completion({ model: selected, ...params }, callOptions);
       if (!result.ok && isRetryableCompletionFailure(result.reason, settings.signal)) {
         const fallback = selected !== model ? model
           : (config.fallbackModel ?? process.env.OPENAI_FALLBACK_MODEL)?.trim() || DEFAULT_FALLBACK_MODEL;
         if (fallback && fallback !== selected) {
-          result = await completion({ model: fallback, ...params }, { ...callOptions, fetcher: config.fetcher ?? fetch });
+          result = await completion({ model: fallback, ...params }, callOptions);
         }
       }
       if (!result.ok) return result;

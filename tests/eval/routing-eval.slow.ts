@@ -37,17 +37,20 @@ const COMPLEX: string[] = [
 
 describe('Given a live model and routing', () => {
   it('When 20 sentences are routed Then simple stays luna and complex mostly terra', { skip: !live, timeout: 300_000 }, async (t) => {
-    const results: { sentence: string; selected: string; ms: number; decisionHasModel: boolean }[] = [];
+    const results: { sentence: string; selected: string; ms: number; decisionHasModel: boolean; confidence: number | null }[] = [];
     for (const sentence of [...SIMPLE, ...COMPLEX]) {
       let selectedModel = 'unknown';
       let decisionHasModel = false;
+      let confidence: number | null = null;
       const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith('/decisions')) {
           const response = await fetch(input, init);
           try {
-            const data = (await response.clone().json()) as { model?: unknown };
+            const data = (await response.clone().json()) as { model?: unknown; answers?: { confidence?: unknown }[] };
             decisionHasModel = Object.prototype.hasOwnProperty.call(data ?? {}, 'model');
+            const reported = data?.answers?.[0]?.confidence;
+            confidence = typeof reported === 'number' ? reported : null;
           } catch {
             decisionHasModel = false;
           }
@@ -78,8 +81,8 @@ describe('Given a live model and routing', () => {
       const result = await model.complete([{ role: 'user', content: sentence }]);
       const ms = Date.now() - start;
       assert.equal(result.ok, true, result.ok ? '' : result.reason);
-      results.push({ sentence, selected: selectedModel, ms, decisionHasModel });
-      t.diagnostic(`routing-eval ${results.length <= SIMPLE.length ? 'simple' : 'complex'}: ${sentence} -> ${selectedModel} (${ms}ms) modelField=${decisionHasModel}`);
+      results.push({ sentence, selected: selectedModel, ms, decisionHasModel, confidence });
+      t.diagnostic(`routing-eval ${results.length <= SIMPLE.length ? 'simple' : 'complex'}: ${sentence} -> ${selectedModel} (${ms}ms) modelField=${decisionHasModel} confidence=${confidence}`);
     }
     const simpleResults = results.slice(0, SIMPLE.length);
     const complexResults = results.slice(SIMPLE.length);
