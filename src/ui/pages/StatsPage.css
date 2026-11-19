@@ -1,0 +1,21 @@
+.stats-page { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; color: #242424; }
+.stats-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.stats-header h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); }
+.stats-home { color: #305c50; text-underline-offset: 4px; }
+.stats-page :focus-visible { outline: 3px solid #356bb4; outline-offset: 3px; }
+.stats-period { color: #525b56; font-size: .85rem; }
+.stats-page h2 { font-size: 1.1rem; margin: 28px 0 8px; }
+.stats-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.stats-totals > div { background: #fff; border: 1px solid #d6ded7; border-radius: 12px; padding: 12px; }
+.stats-totals dt { color: #525b56; font-size: .8rem; }
+.stats-totals dd { margin: 4px 0 0; font-size: clamp(1.1rem, 4vw, 1.5rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+.stats-table-wrap { overflow-x: auto; }
+.stats-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.stats-table th, .stats-table td { padding: 8px; border-bottom: 1px solid #d6ded7; text-align: right; white-space: nowrap; }
+.stats-table th:first-child { text-align: left; }
+.stats-table thead th { font-size: .8rem; color: #525b56; }
+.stats-chart { width: 100%; height: auto; }
+.stats-axis { stroke: #9eafa3; stroke-width: 1; }
+.stats-bar { fill: #245344; }
+.stats-tick { fill: #525b56; font-size: 11px; }
+.stats-error button { font: inherit; min-height: 44px; padding: 9px 16px; border-radius: 10px; border: 1px solid #9eafa3; background: #fff; color: #305c50; cursor: pointer; }

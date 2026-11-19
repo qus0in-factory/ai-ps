@@ -11,6 +11,7 @@ import { createBrowserAudioPlayer } from './infra/browser-audio.ts';
 import { createBrowserRecorder } from './infra/media-recorder.ts';
 import { createHttpTalk } from './infra/http-talk.ts';
 import { createHttpResearch } from './infra/http-research.ts';
+import { createHttpStats } from './infra/http-stats.ts';
 import { App } from './ui/App.tsx';
 import './ui/styles/global.css';
 
@@ -21,8 +22,9 @@ const adventure = createHttpAdventure();
 const talkStore = createTalkStore();
 const talk = createHttpTalk();
 const research = createHttpResearch();
+const stats = createHttpStats();
 const recorder = createBrowserRecorder();
 const audioPlayer = createBrowserAudioPlayer();
 render(() => (
-  <App chat={chat} queens={queens} adventure={adventure} adventureStore={adventureStore} talk={talk} talkStore={talkStore} recorder={recorder} audioPlayer={audioPlayer} research={research} />
+  <App chat={chat} queens={queens} adventure={adventure} adventureStore={adventureStore} talk={talk} talkStore={talkStore} recorder={recorder} audioPlayer={audioPlayer} research={research} stats={stats} />
 ), document.getElementById('root')!);
