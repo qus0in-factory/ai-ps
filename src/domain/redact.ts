@@ -7,6 +7,8 @@ const AUTH = /\b(?:Bearer|Basic)\s+[^\s,;"']+/gi;
 const KEY_PREFIX = /\b(?:sk-|gsk_|xai-|hf_|AIza|AKIA)[a-zA-Z0-9_-]+/g;
 const ASSIGNMENT = /(["']?(?:api[-_]?key|access[-_]?token|token|secret|password|authorization)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
 const PHONE = /(?:\+\d{1,3}[\s.-])?(?:\(?\d{2,4}\)?[\s.-])\d{3,4}[\s.-]\d{4}\b|\b01[016789]\d{7,8}\b/g;
+// 구분자 없는 국제 전화(+821012345678). 단어에 붙은 + 는 건드리지 않는다.
+const INTL_PHONE = /(?<!\w)\+[1-9]\d{6,14}\b/g;
 const IPV4 = /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b/g;
 const IPV6 = /\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b|\b(?:[0-9a-f]{1,4}:){1,7}:[0-9a-f:]*/gi;
 const LONG_TOKEN = /\b[a-zA-Z0-9_+\/=-]{32,}\b/g;
@@ -33,6 +35,7 @@ function maskText(text: string): string {
     .replace(KEY_PREFIX, '[KEY]')
     .replace(ASSIGNMENT, '$1[KEY]')
     .replace(PHONE, '[PHONE]')
+    .replace(INTL_PHONE, '[PHONE]')
     .replace(IPV4, '[IP]')
     .replace(IPV6, '[IP]')
     .replace(LONG_TOKEN, '[KEY]')

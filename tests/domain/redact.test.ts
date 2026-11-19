@@ -28,6 +28,18 @@ describe('Given text that may contain identifiable data', () => {
     assert.match(redacted, /\[KEY\]/);
   });
 
+  it('When a separator-less international phone number appears Then it is masked as [PHONE]', () => {
+    const redacted = redactText('연락처 +821012345678 그리고 +14155552671');
+    assert.equal(redacted, '연락처 [PHONE] 그리고 [PHONE]');
+    assert.equal(redacted.includes('821012345678'), false);
+    assert.equal(redacted.includes('14155552671'), false);
+  });
+
+  it('When a plus sign is attached to a word Then the digits are not treated as a phone number', () => {
+    const input = 'hash a+123456789 token';
+    assert.equal(redactText(input), input);
+  });
+
   it('When a URL appears Then only the query string is hidden and credentials are dropped', () => {
     const redacted = redactText('먼저 https://user:password@gateway.example/v1?token=private-query 를 본다');
     assert.equal(redacted, '먼저 https://gateway.example/v1?[REDACTED] 를 본다');
